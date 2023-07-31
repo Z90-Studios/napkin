@@ -1,11 +1,15 @@
 use actix_web::{ get, post, web, Responder, Result };
+use deadpool_postgres::{Client, Pool};
 
 use crate::models::projects::Project;
-use crate::errors::{ NapkinError, NapkinErrorRoot };
+use crate::errors::{ NapkinError, NapkinErrorRoot, handle_pool_error };
+use crate::db;
 
 #[get("")]
-pub async fn get_projects() -> Result<impl Responder> {
-    let projects: Vec<Project> = Vec::new();
+pub async fn get_projects(db_pool: web::Data<Pool>) -> Result<impl Responder, NapkinError> {
+    // let projects: Vec<Project> = Vec::new();
+    let client: Client = db_pool.get().await.map_err(handle_pool_error)?;
+    let projects = db::projects::get_projects(&client).await?;
     Ok(web::Json(projects))
 }
 
@@ -32,7 +36,7 @@ pub async fn get_project(id: web::Path<String>) -> Result<impl Responder, Napkin
             Err(NapkinError {
                 code: "PROJECT_NO_ID",
                 message: "Project with ID {id} Not Found",
-                root: &NapkinErrorRoot::NotFound,
+                root: NapkinErrorRoot::NotFound,
             }),
     }
 }
