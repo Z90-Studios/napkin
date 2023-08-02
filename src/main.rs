@@ -56,6 +56,7 @@ async fn main() -> std::io::Result<()> {
                     .service(projects::get_projects)
                     .service(projects::get_project)
                     .service(projects::post_project)
+                    .service(projects::delete_project)
             )
     })
     .bind((config.server_addr, 8080))?

@@ -1,8 +1,8 @@
-use actix_web::{ get, post, web, Responder, Result };
+use actix_web::{ get, post, put, delete, web, Responder, Result };
 use deadpool_postgres::{Client, Pool};
 
 use crate::models::projects::Project;
-use crate::errors::{ NapkinError, NapkinErrorRoot, handle_pool_error };
+use crate::errors::{ NapkinError, handle_pool_error };
 use crate::db;
 
 #[get("")]
@@ -14,29 +14,39 @@ pub async fn get_projects(db_pool: web::Data<Pool>) -> Result<impl Responder, Na
 }
 
 #[post("")]
-pub async fn post_project(body: web::Json<Project>) -> Result<impl Responder> {
-    let mut projects: Vec<Project> = Vec::new();
-    projects.push(body.into_inner());
+pub async fn post_project(body: web::Json<Project>, db_pool: web::Data<Pool>) -> Result<impl Responder> {
+    let project_info: Project = body.into_inner();
+    let client: Client = db_pool.get().await.map_err(handle_pool_error)?;
 
-    Ok(web::Json(projects))
+    let new_project = db::projects::add_project(&client, project_info).await?;
+
+    Ok(web::Json(new_project))
 }
 
 #[get("/{id}")]
-pub async fn get_project(id: web::Path<String>) -> Result<impl Responder, NapkinError> {
-    let mut projects: Vec<Project> = Vec::new();
-    projects.push(Project {
-        id: "123".to_string(),
-        name: "Napkin".to_string(),
-    });
+pub async fn get_project(id: web::Path<String>, db_pool: web::Data<Pool>) -> Result<impl Responder, NapkinError> {
+    let client: Client = db_pool.get().await.map_err(handle_pool_error)?;
 
-    let project = projects.into_iter().find(|p| p.id == id.to_string());
-    match project {
-        Some(_) => Ok(web::Json(project)),
-        None =>
-            Err(NapkinError {
-                code: "PROJECT_NO_ID",
-                message: "Project with ID {id} Not Found",
-                root: NapkinErrorRoot::NotFound,
-            }),
-    }
+    let project = db::projects::get_project(&client, &id).await?;
+
+    Ok(web::Json(project))
+}
+
+#[put("/{id}")]
+pub async fn update_project(id: web::Path<String>, body: web::Json<Project>, db_pool: web::Data<Pool>) -> Result<impl Responder, NapkinError> {
+    let project_info: Project = body.into_inner();
+    let client: Client = db_pool.get().await.map_err(handle_pool_error)?;
+
+    let updated_project = db::projects::update_project(&client, &id, project_info).await?;
+
+    Ok(web::Json(updated_project))
+}
+
+#[delete("/{id}")]
+pub async fn delete_project(id: web::Path<String>, db_pool: web::Data<Pool>) -> Result<impl Responder, NapkinError> {
+    let client: Client = db_pool.get().await.map_err(handle_pool_error)?;
+
+    let deleted_project = db::projects::delete_project(&client, &id).await?;
+
+    Ok(web::Json(deleted_project))
 }
