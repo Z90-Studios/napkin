@@ -1,5 +1,6 @@
 [package]
 name = "napkin"
+description = "Multi-Dimensional Data-Layer API for AI Agents"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4"
+clap = { version = "4.3.19", features = ["derive"] }
 config = "0.13.3"
 deadpool-postgres = { version = "0.10.5", features = ["serde"] }
 derive_more = "0.99.17"

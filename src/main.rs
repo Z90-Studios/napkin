@@ -1,5 +1,6 @@
 use ::config::Config;
 use actix_web::{get, middleware::Logger, web, App, HttpServer};
+use clap::Parser;
 use dotenv::dotenv;
 use tokio_postgres::NoTls;
 
@@ -15,6 +16,22 @@ struct AppState {
     app_name: String,
 }
 
+#[derive(Parser, Debug)]
+#[command(author,
+    version,
+    about,
+    long_about = None,
+    before_help = "Project:\n███╗   ██╗ █████╗ ██████╗ ██╗  ██╗██╗███╗   ██╗\n████╗  ██║██╔══██╗██╔══██╗██║ ██╔╝██║████╗  ██║\n██╔██╗ ██║███████║██████╔╝█████╔╝ ██║██╔██╗ ██║\n██║╚██╗██║██╔══██║██╔═══╝ ██╔═██╗ ██║██║╚██╗██║\n██║ ╚████║██║  ██║██║     ██║  ██╗██║██║ ╚████║\n╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝\nA Z90 Studios Project.\n\nCheck out https://z90.studio for documentation and community links.")]
+struct Cli {
+    /// Name of the person to greet
+    #[arg(short, long)]
+    name: String,
+
+    /// Number of times to greet
+    #[arg(short, long, default_value_t = 1)]
+    count: u8,
+}
+
 #[get("/")]
 async fn index(data: web::Data<AppState>) -> String {
     let app_name = &data.app_name;
@@ -25,6 +42,12 @@ async fn index(data: web::Data<AppState>) -> String {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
+
+    let args = Cli::parse();
+
+    for _ in 0..args.count {
+        println!("Hello {}!", args.name)
+    }
 
     let config_ = Config::builder()
         .add_source(::config::Environment::default())
