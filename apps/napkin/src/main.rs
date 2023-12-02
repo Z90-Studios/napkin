@@ -11,6 +11,7 @@ mod models;
 mod services;
 use crate::config::NapkinConfig;
 use services::projects;
+use services::vector;
 
 struct AppState {
     app_name: String,
@@ -80,6 +81,10 @@ async fn main() -> std::io::Result<()> {
                     .service(projects::get_project)
                     .service(projects::post_project)
                     .service(projects::delete_project)
+            )
+            .service(
+                web::scope("/vector")
+                    .service(vector::create_vector)
             )
     })
     .bind((config.server_addr, 8080))?

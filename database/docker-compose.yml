@@ -1,18 +1,18 @@
-version: '3.7'
+version: "3.7"
 services:
   postgres:
     image: ankane/pgvector:latest
     restart: always
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASS=postgres
+      - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=napkin
     logging:
       options:
         max-size: 10m
         max-file: "3"
     ports:
-      - '5438:5432'
+      - "5438:5432"
     volumes:
-      - /home/z/.napkin/postgres-data:/var/lib/postgresql/data
+      - ../.napkin/postgres-data:/var/lib/postgresql/data
       - ./create_tables.sql:/docker-entrypoint-initdb.d/create-tables.sql

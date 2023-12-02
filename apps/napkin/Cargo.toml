@@ -15,6 +15,7 @@ derive_more = "0.99.17"
 dotenv = "0.15.0"
 env_logger = "0.10.0"
 log = "0.4.19"
+pgvector = { version = "0.3.2", features = ["postgres", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.104"
 tokio-pg-mapper = "0.2.0"
