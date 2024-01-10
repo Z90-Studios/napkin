@@ -1,5 +1,10 @@
-use egui::{Align, Key};
+#![deny(clippy::all)]
+#![forbid(unsafe_code)]
+
+use egui::Key;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::mpsc::{Receiver, Sender};
 
 use crate::theme::{set_theme, LATTE, MACCHIATO};
 
@@ -37,6 +42,10 @@ pub enum Theme {
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct AtlasApp {
+    #[serde(skip)]
+    tx: Sender<String>,
+    #[serde(skip)]
+    rx: Receiver<String>,
     // Example stuff:
     label: String,
     #[serde(skip)] // This how you opt-out of serialization of a field
@@ -46,12 +55,15 @@ pub struct AtlasApp {
     settings_window_open: bool,
     napkin_settings: NapkinSettings,
     napkin_temp_settings: NapkinSettings,
+    ollama_check: String,
 }
 
 impl Default for AtlasApp {
     fn default() -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
         Self {
-            // Example stuff:
+            tx,
+            rx,
             label: "Hello World!".to_owned(),
             value: 2.7,
             theme: Theme::Dark,
@@ -59,6 +71,7 @@ impl Default for AtlasApp {
             settings_window_open: false,
             napkin_settings: NapkinSettings::default(),
             napkin_temp_settings: NapkinSettings::default(),
+            ollama_check: "Not checked".to_owned(),
         }
     }
 }
@@ -95,6 +108,9 @@ impl eframe::App for AtlasApp {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Ok(status) = self.rx.try_recv() {
+            self.ollama_check = format!("Connection successful: {}", status).to_owned();
+        }
         set_theme(
             &ctx,
             match self.theme {
@@ -151,13 +167,19 @@ impl eframe::App for AtlasApp {
 
         egui::SidePanel::left("left_panel")
             .resizable(true)
-            .default_width(200.0)
             .show_animated(ctx, self.side_panel_open, |ui| {
-                ui.set_width(200.0);
-                ui.with_layout(
-                    egui::Layout::top_down(Align::Min).with_cross_align(Align::Min),
-                    |ui| ui.heading("Side Panel"),
-                );
+                ui.heading("Side Panel");
+
+                if ui
+                    .button("Check Connection")
+                    .on_hover_text("Check connection to Ollama server.")
+                    .clicked()
+                {
+                    println!("Checking connection to Ollama server...");
+                    check_ollama(self, self.tx.clone(), ctx.clone());
+                }
+                ui.label(&self.ollama_check);
+                ui.allocate_space(ui.available_size());
             });
 
         egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
@@ -178,6 +200,24 @@ impl eframe::App for AtlasApp {
     }
 }
 
+fn check_ollama(app: &AtlasApp, tx: Sender<String>, ctx: egui::Context) {
+    let host = app.napkin_settings.service.host.clone();
+    let port = app.napkin_settings.service.port.clone();
+    tokio::spawn(async move {
+        let body: String = Client::default()
+            .get(format!("http://{}:{}/", host, port))
+            .send()
+            .await
+            .expect("Unable to send request")
+            .text()
+            .await
+            .expect("Unable to parse response");
+
+        let _ = tx.send(body);
+        ctx.request_repaint();
+    });
+}
+
 fn central_panel(ctx: &egui::Context, app: &mut AtlasApp) {
     egui::CentralPanel::default()
     .show(ctx, |ui| {
@@ -194,7 +234,7 @@ fn central_panel(ctx: &egui::Context, app: &mut AtlasApp) {
     //     self.value += 1.0;
     // }
 
-    ui.heading("Project: Napkin Atlas");
+    ui.heading("Project: Atlas Napkin");
     ui.label("So here's the plan:\n\nThe purpose of this application is to serve as the frontend to a locally run AI agent. This agent will do the following:\n\n1. Parse a codebase, or other information.\n2. Map the data into a network graph with vector database.\n3. Use the data in prompting along with multiple other elements to create a cohesive change to codebases.");
 
     ui.separator();
