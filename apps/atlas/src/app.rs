@@ -472,8 +472,6 @@ fn chat_window(ctx: &egui::Context, app: &mut AtlasApp) {
                         },
                     ))
                     .show(ui, |ui| {
-                        let available_width = ui.available_width();
-                        let available_height = ui.available_height();
                         // ui.set_width(available_width);
                         egui_extras::TableBuilder::new(ui)
                             .stick_to_bottom(true)
