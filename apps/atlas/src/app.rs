@@ -2,6 +2,9 @@
 #![forbid(unsafe_code)]
 
 use egui::Key;
+use egui_graphs::{
+    DefaultEdgeShape, DefaultNodeShape, Graph, GraphView, SettingsInteraction, SettingsStyle,
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::mpsc::{Receiver, Sender};
@@ -107,11 +110,14 @@ pub struct AtlasApp {
     current_prompt: String,
     chat_history: Vec<ChatHistory>,
     chat_window_state: ChatWindowState,
+    #[serde(skip)]
+    g: Graph<(), ()>,
 }
 
 impl Default for AtlasApp {
     fn default() -> Self {
         let (tx, rx) = std::sync::mpsc::channel();
+        let g = generate_graph();
         Self {
             tx,
             rx,
@@ -127,8 +133,23 @@ impl Default for AtlasApp {
             current_prompt: "".to_owned(),
             chat_history: vec![],
             chat_window_state: ChatWindowState { row_sizes: vec![] },
+            g,
         }
     }
+}
+
+pub fn generate_graph() -> Graph<(), ()> {
+    let mut g = petgraph::stable_graph::StableGraph::new();
+
+    let a = g.add_node(());
+    let b = g.add_node(());
+    let c = g.add_node(());
+
+    g.add_edge(a, b, ());
+    g.add_edge(b, c, ());
+    g.add_edge(c, a, ());
+
+    Graph::from(&g)
 }
 
 impl AtlasApp {
@@ -356,6 +377,21 @@ fn central_panel(ctx: &egui::Context, app: &mut AtlasApp) {
         // if ui.button("Increment").clicked() {
         //     self.value += 1.0;
         // }
+
+        let interaction_settings = &SettingsInteraction::new()
+            .with_dragging_enabled(true)
+            .with_node_clicking_enabled(true)
+            .with_node_selection_enabled(true)
+            .with_node_selection_multi_enabled(true)
+            .with_edge_clicking_enabled(true)
+            .with_edge_selection_enabled(true)
+            .with_edge_selection_multi_enabled(true);
+        let style_settings = &SettingsStyle::new().with_labels_always(true);
+        ui.add(
+            &mut GraphView::<_, _, _, _, DefaultNodeShape, DefaultEdgeShape>::new(&mut app.g)
+                .with_styles(style_settings)
+                .with_interactions(interaction_settings),
+        );
     });
 
     if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::B)) {
