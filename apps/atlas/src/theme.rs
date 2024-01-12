@@ -18,7 +18,7 @@ pub fn set_theme(ctx: &egui::Context, theme: Theme) {
 /// ctx.set_style(style);
 /// # });
 /// ```
-pub fn set_style_theme(style: &mut egui::Style, theme: Theme) {
+pub fn _set_style_theme(style: &mut egui::Style, theme: Theme) {
     let old = style.visuals.clone();
     style.visuals = theme.visuals(old);
 }

@@ -80,6 +80,10 @@ pub enum AsyncMessage {
     OllamaStatusCheck(String),
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct ChatWindowState {
+    pub row_sizes: Vec<f32>,
+}
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -102,6 +106,7 @@ pub struct AtlasApp {
     ollama_check: String,
     current_prompt: String,
     chat_history: Vec<ChatHistory>,
+    chat_window_state: ChatWindowState,
 }
 
 impl Default for AtlasApp {
@@ -121,6 +126,7 @@ impl Default for AtlasApp {
             ollama_check: "❌".to_owned(),
             current_prompt: "".to_owned(),
             chat_history: vec![],
+            chat_window_state: ChatWindowState { row_sizes: vec![] },
         }
     }
 }
@@ -273,6 +279,7 @@ impl eframe::App for AtlasApp {
                 egui::warn_if_debug_build(ui);
             });
         });
+        chat_window(ctx, self);
         central_panel(ctx, self);
         settings_window(ctx, self);
         about_window(ctx, self);
@@ -349,68 +356,96 @@ fn central_panel(ctx: &egui::Context, app: &mut AtlasApp) {
         // if ui.button("Increment").clicked() {
         //     self.value += 1.0;
         // }
+    });
 
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-            if ui.button("Configure").clicked() {
-                app.settings_window_open = true;
-            }
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(&app.napkin_settings.model).color(match app.theme {
-                        Theme::Light => LATTE.sapphire,
-                        Theme::Dark => MACCHIATO.sapphire,
-                    }),
+    if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::B)) {
+        app.side_panel_open = !app.side_panel_open;
+    }
+}
+
+fn chat_window(ctx: &egui::Context, app: &mut AtlasApp) {
+    egui::Window::new("Chat")
+        .open(&mut true)
+        .resizable(true)
+        .constrain(true)
+        .show(ctx, |ui| {
+            ui.vertical(|ui| {
+                ui.allocate_ui_with_layout(
+                    ui.available_size(),
+                    egui::Layout::right_to_left(egui::Align::TOP),
+                    |ui| {
+                        if ui.button("Clear").clicked() {
+                            app.chat_history.clear();
+                        }
+                        ui.add_space(8.0);
+                        if ui.button("Configure").clicked() {
+                            app.settings_window_open = true;
+                        }
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(&app.napkin_settings.model).color(
+                                match app.theme {
+                                    Theme::Light => LATTE.sapphire,
+                                    Theme::Dark => MACCHIATO.sapphire,
+                                },
+                            ));
+                            ui.label("Model: ");
+                        });
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(&app.napkin_settings.service.port).color(
+                                    match app.theme {
+                                        Theme::Light => LATTE.sapphire,
+                                        Theme::Dark => MACCHIATO.sapphire,
+                                    },
+                                ),
+                            );
+                            ui.label("Port: ");
+                        });
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(&app.napkin_settings.service.host).color(
+                                    match app.theme {
+                                        Theme::Light => LATTE.sapphire,
+                                        Theme::Dark => MACCHIATO.sapphire,
+                                    },
+                                ),
+                            );
+                            ui.label("Host: ");
+                        });
+                    },
                 );
-                ui.label("Model: ");
-            });
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(&app.napkin_settings.service.port).color(match app.theme {
-                        Theme::Light => LATTE.sapphire,
-                        Theme::Dark => MACCHIATO.sapphire,
-                    }),
-                );
-                ui.label("Port: ");
-            });
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(&app.napkin_settings.service.host).color(match app.theme {
-                        Theme::Light => LATTE.sapphire,
-                        Theme::Dark => MACCHIATO.sapphire,
-                    }),
-                );
-                ui.label("Host: ");
-            });
-        });
-        let user_color = match app.theme {
-            Theme::Light => LATTE.flamingo,
-            Theme::Dark => MACCHIATO.flamingo,
-        };
-        let ai_color = match app.theme {
-            Theme::Light => LATTE.sapphire,
-            Theme::Dark => MACCHIATO.sapphire,
-        };
-        egui::Frame::none()
-            .rounding(4.0)
-            .inner_margin(egui::vec2(4.0, 4.0))
-            .stroke(egui::Stroke::new(
-                1.0,
-                match app.theme {
-                    Theme::Light => LATTE.surface1,
-                    Theme::Dark => MACCHIATO.surface1,
-                },
-            ))
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .max_height(400.0)
+                let user_color = match app.theme {
+                    Theme::Light => LATTE.flamingo,
+                    Theme::Dark => MACCHIATO.flamingo,
+                };
+                let ai_color = match app.theme {
+                    Theme::Light => LATTE.sapphire,
+                    Theme::Dark => MACCHIATO.sapphire,
+                };
+                egui::Frame::none()
+                    .rounding(4.0)
+                    .inner_margin(egui::vec2(4.0, 4.0))
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        match app.theme {
+                            Theme::Light => LATTE.surface1,
+                            Theme::Dark => MACCHIATO.surface1,
+                        },
+                    ))
                     .show(ui, |ui| {
+                        let available_width = ui.available_width();
+                        let available_height = ui.available_height();
+                        // ui.set_width(available_width);
                         egui_extras::TableBuilder::new(ui)
-                            .column(egui_extras::Column::auto().resizable(true))
-                            .column(egui_extras::Column::remainder().resizable(true))
-                            .column(egui_extras::Column::auto().resizable(true))
+                            .stick_to_bottom(true)
+                            .striped(true)
+                            .column(egui_extras::Column::exact(50.0))
+                            .column(egui_extras::Column::exact(240.0))
+                            .column(egui_extras::Column::remainder().at_least(240.0).clip(true))
+                            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
                             .header(20.0, |mut header| {
                                 header.col(|ui| {
                                     ui.label(egui::RichText::new("User").color(match app.theme {
@@ -436,69 +471,131 @@ fn central_panel(ctx: &egui::Context, app: &mut AtlasApp) {
                                 });
                             })
                             .body(|mut body| {
-                                for prompt in app.chat_history.iter() {
-                                    body.row(30.0, |mut row| {
-                                        row.col(|ui| {
-                                            ui.label(egui::RichText::new(&prompt.user).color(
-                                                if &prompt.user == "USER" {
-                                                    user_color
-                                                } else {
-                                                    ai_color
-                                                },
-                                            ));
-                                        });
-                                        row.col(|ui| {
-                                            egui::Frame::none()
-                                                .rounding(2.0)
-                                                .inner_margin(egui::vec2(4.0, 4.0))
-                                                .outer_margin(egui::vec2(8.0, 0.0))
-                                                .stroke(egui::Stroke::new(
-                                                    1.0,
-                                                    match app.theme {
-                                                        Theme::Light => LATTE.surface0,
-                                                        Theme::Dark => MACCHIATO.surface0,
-                                                    },
-                                                ))
-                                                .show(ui, |ui| {
-                                                    egui::ScrollArea::vertical()
-                                                        .max_height(400.0)
-                                                        .show(ui, |ui| {
-                                                            ui.label(&prompt.message);
-                                                        });
-                                                });
-                                        });
-                                        row.col(|ui| {
-                                            ui.label(&prompt.timestamp);
+                                if app.chat_window_state.row_sizes.is_empty() {
+                                    app.chat_window_state.row_sizes =
+                                        vec![30.0; app.chat_history.len()];
+                                }
+                                if app.chat_window_state.row_sizes.len() != app.chat_history.len() {
+                                    app.chat_window_state.row_sizes =
+                                        vec![30.0; app.chat_history.len()];
+                                }
+                                // for prompt in app.chat_history.iter() {
+                                // }
+                                let row_sizes = app.chat_window_state.row_sizes.clone();
+                                body.heterogeneous_rows(row_sizes.into_iter(), |mut row| {
+                                    let row_index = row.index();
+                                    let prompt = &app.chat_history[row_index];
+                                    row.col(|ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.add(
+                                                egui::Label::new(
+                                                    egui::RichText::new(&prompt.user).color(
+                                                        if &prompt.user == "USER" {
+                                                            user_color
+                                                        } else {
+                                                            ai_color
+                                                        },
+                                                    ),
+                                                )
+                                                .wrap(false),
+                                            );
+                                            ui.add_space(8.0);
                                         });
                                     });
-                                }
+                                    row.col(|ui| {
+                                        ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(&prompt.timestamp).color(
+                                                    match app.theme {
+                                                        Theme::Light => LATTE.yellow,
+                                                        Theme::Dark => MACCHIATO.yellow,
+                                                    },
+                                                ),
+                                            )
+                                            .wrap(false),
+                                        );
+                                    });
+                                    row.col(|ui| {
+                                        // let text_frame = egui::Frame::none()
+                                        //     .rounding(2.0)
+                                        //     .inner_margin(egui::vec2(4.0, 4.0))
+                                        //     .outer_margin(egui::vec2(8.0, 0.0))
+                                        //     .stroke(egui::Stroke::new(
+                                        //         1.0,
+                                        //         match app.theme {
+                                        //             Theme::Light => LATTE.surface0,
+                                        //             Theme::Dark => MACCHIATO.surface0,
+                                        //         },
+                                        //     ))
+                                        //     .show(ui, |ui| {
+                                        //     });
+                                        let message_label = ui.add(
+                                            egui::Label::new(egui::RichText::new(&prompt.message))
+                                                .wrap(true),
+                                        );
+                                        // let current_height = ui.min_rect().height();
+                                        let current_height = message_label.rect.height();
+                                        if current_height > 30.0 {
+                                            app.chat_window_state.row_sizes[row_index] =
+                                                current_height;
+                                        }
+                                    });
+                                });
                             });
+                        // egui::Grid::new("some_unique_id").show(ui, |ui| {
+                        //     ui.label("First row, first column");
+
+                        //     let text_frame = egui::Frame::none()
+                        //         .rounding(2.0)
+                        //         .inner_margin(egui::vec2(4.0, 4.0))
+                        //         .outer_margin(egui::vec2(8.0, 0.0))
+                        //         .stroke(egui::Stroke::new(
+                        //             1.0,
+                        //             match app.theme {
+                        //                 Theme::Light => LATTE.surface0,
+                        //                 Theme::Dark => MACCHIATO.surface0,
+                        //             },
+                        //         ))
+                        //         .show(ui, |ui| {
+                        //             ui.label(&prompt.message);
+                        //         });
+                        //     ui.label("First row, third column");
+                        //     ui.end_row();
+
+                        //     ui.label("Second row, first column");
+                        //     ui.label("Second row, second column");
+                        //     ui.label("Second row, third column");
+                        //     ui.end_row();
+
+                        //     ui.horizontal(|ui| {
+                        //         ui.label("Same");
+                        //         ui.label("cell");
+                        //     });
+                        //     ui.label("Third row, second column");
+                        //     ui.end_row();
+                        // });
                     });
             });
 
-        ui.add_space(4.0);
+            ui.add_space(4.0);
 
-        ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
-            ui.horizontal(|ui| {
-                ui.add_space(8.0);
-                if ui.button("Send").clicked() {
-                    app.submit_prompt(&ctx);
-                }
-                let edit_response = ui.add_sized(
-                    ui.available_size(),
-                    egui::TextEdit::singleline(&mut app.current_prompt),
-                );
-                if edit_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    app.submit_prompt(&ctx);
-                    edit_response.request_focus();
-                }
+            ui.with_layout(egui::Layout::top_down(egui::Align::RIGHT), |ui| {
+                ui.horizontal(|ui| {
+                    ui.add_space(8.0);
+                    if ui.button("Send").clicked() {
+                        app.submit_prompt(&ctx);
+                    }
+                    let edit_response = ui.add_sized(
+                        ui.available_size(),
+                        egui::TextEdit::singleline(&mut app.current_prompt),
+                    );
+                    if edit_response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        app.submit_prompt(&ctx);
+                        edit_response.request_focus();
+                    }
+                });
             });
         });
-    });
-
-    if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::B)) {
-        app.side_panel_open = !app.side_panel_open;
-    }
 }
 
 fn settings_window(ctx: &egui::Context, app: &mut AtlasApp) {
