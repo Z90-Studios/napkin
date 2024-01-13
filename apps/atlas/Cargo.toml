@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["J. Zane Cook <jzanecook@z90.studio>"]
 edition = "2021"
 rust-version = "1.72"
+license = "MIT"
 
 
 [dependencies]
@@ -22,8 +23,14 @@ git2 = "0.18.1"
 reqwest = { version = "0.11.23", features = ["json", "multipart", "blocking"] }
 tokio = { version = "1.35.1", features = ["full"] }
 egui = "0.25.0"
-egui_graphs = { version = "0.17.1", path = "../../../egui_graphs", features = ["serde", "egui_persistence", "events"] }
+egui_graphs = { version = "0.17.1", path = "../../../egui_graphs", features = [
+    "serde",
+    "egui_persistence",
+    "events",
+] }
 petgraph = { version = "0.6.4", features = ["serde"] }
+egui_file = "0.14.0"
+egui_dock = { version = "0.10.0", features = ["serde"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

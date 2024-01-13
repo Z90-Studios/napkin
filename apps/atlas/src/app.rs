@@ -2,12 +2,19 @@
 #![forbid(unsafe_code)]
 
 use egui::Key;
+use egui_dock::{DockArea, DockState, Style, TabViewer};
+use egui_file::FileDialog;
 use egui_graphs::{
     DefaultEdgeShape, DefaultNodeShape, Graph, GraphView, SettingsInteraction, SettingsStyle,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::sync::mpsc::{Receiver, Sender};
+use std::{
+    collections::BTreeMap,
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    sync::mpsc::{Receiver, Sender},
+};
 
 use crate::theme::{set_theme, LATTE, MACCHIATO};
 
@@ -23,6 +30,8 @@ pub struct NapkinSettings {
     service: NapkinService,
 }
 
+type Title = String;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChatHistory {
     /** Used to handle multiple chats */
@@ -35,6 +44,73 @@ pub struct ChatHistory {
     model: Option<String>,
     /** Timestamp of message */
     timestamp: String,
+}
+
+#[derive(Serialize, Deserialize)]
+enum PanelType {
+    Text,
+    Chat {
+        history: Vec<ChatHistory>,
+        row_sizes: Vec<f32>,
+    },
+    Graph,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PanelTab {
+    title: Title,
+    panel_type: PanelType,
+    text: Option<String>,
+    // More options to come
+}
+
+impl Default for PanelTab {
+    fn default() -> Self {
+        Self {
+            title: "".to_owned(),
+            panel_type: PanelType::Text,
+            text: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct AtlasTabs {
+    buffers: BTreeMap<Title, PanelTab>,
+}
+
+impl TabViewer for AtlasTabs {
+    type Tab = Title;
+
+    fn title(&mut self, title: &mut Title) -> egui::WidgetText {
+        egui::WidgetText::from(&*title)
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, title: &mut Title) {
+        let panel_tab: &mut PanelTab = self.buffers.entry(title.clone()).or_default();
+        // let panel_app = &mut panel_tab.app;
+
+        match &panel_tab.panel_type {
+            PanelType::Text => {
+                if let Some(text) = &mut panel_tab.text {
+                    let _ = egui::TextEdit::multiline(text)
+                        .desired_width(f32::INFINITY)
+                        .show(ui);
+                } else {
+                    ui.add(egui::Label::new("Invalid text buffer"));
+                }
+            }
+            PanelType::Chat {history, row_sizes} => {
+                ui.add(egui::Label::new("Chat"));
+                // chat_window(ui.ctx(), history, row_sizes);
+            }
+            PanelType::Graph => {
+                ui.add(egui::Label::new("Graph"));
+            }
+            // PanelType::Chat => chat_window(ui.ctx(), app),
+            // PanelType::Graph => central_panel(ui.ctx(), app),
+        }
+    }
 }
 
 impl NapkinSettings {
@@ -112,12 +188,24 @@ pub struct AtlasApp {
     chat_window_state: ChatWindowState,
     #[serde(skip)]
     g: Graph<(), ()>,
+    #[serde(skip)]
+    opened_file: Option<PathBuf>,
+    #[serde(skip)]
+    open_file_dialog: Option<FileDialog>,
+    // Tabs for egui_dock
+    tabs: AtlasTabs,
+    // Tree for egui_dock DockState
+    tree: DockState<String>,
 }
 
 impl Default for AtlasApp {
     fn default() -> Self {
         let (tx, rx) = std::sync::mpsc::channel();
         let g = generate_graph();
+        let buffers = BTreeMap::default();
+
+        let tree = DockState::new(vec![]);
+
         Self {
             tx,
             rx,
@@ -134,6 +222,10 @@ impl Default for AtlasApp {
             chat_history: vec![],
             chat_window_state: ChatWindowState { row_sizes: vec![] },
             g,
+            opened_file: None,
+            open_file_dialog: None,
+            tabs: AtlasTabs { buffers },
+            tree,
         }
     }
 }
@@ -164,6 +256,10 @@ impl AtlasApp {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
 
+        Default::default()
+    }
+
+    pub fn reset() -> Self {
         Default::default()
     }
 
@@ -230,12 +326,34 @@ impl eframe::App for AtlasApp {
                 let is_web = cfg!(target_arch = "wasm32");
                 if !is_web {
                     ui.menu_button("File", |ui| {
+                        if ui.button("Reset").clicked() {
+                            *self = AtlasApp::reset();
+                        }
                         if ui.button("Settings").clicked() {
                             self.settings_window_open = true;
                         }
                         ui.separator();
                         if ui.button("Quit").clicked() {
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        }
+                    });
+                    ui.menu_button("Window", |ui| {
+                        if ui.button("Project Tree").clicked() {
+                            self.side_panel_open = !self.side_panel_open;
+                        }
+                        if ui.button("Chat").clicked() {
+                            self.tree.push_to_focused_leaf("Chat".to_owned());
+                            self.tabs.buffers.insert(
+                                "Chat".to_owned(),
+                                PanelTab {
+                                    title: "Chat".to_owned(),
+                                    text: None,
+                                    panel_type: PanelType::Chat {
+                                        history: self.chat_history.clone(),
+                                        row_sizes: self.chat_window_state.row_sizes.clone(),
+                                    },
+                                },
+                            );
                         }
                     });
                     if ui.button("About").clicked() {
@@ -274,17 +392,44 @@ impl eframe::App for AtlasApp {
             .show_animated(ctx, self.side_panel_open, |ui| {
                 ui.set_min_width(200.0);
 
-                ui.horizontal(|ui| {
-                    if ui
-                        .button("Check Connection")
-                        .on_hover_text("Check connection to Ollama server.")
-                        .clicked()
-                    {
-                        check_ollama(self, self.tx.clone(), ctx.clone());
-                    }
-                    ui.label(&self.ollama_check);
-                });
                 ui.separator();
+
+                if (ui.button("Open")).clicked() {
+                    // Show only files with the extension "txt".
+                    let filter = Box::new({
+                        let ext = Some(OsStr::new("txt"));
+                        move |path: &Path| -> bool { path.extension() == ext }
+                    });
+                    let mut dialog =
+                        FileDialog::open_file(self.opened_file.clone()).show_files_filter(filter);
+                    dialog.open();
+                    self.open_file_dialog = Some(dialog);
+                }
+
+                if let Some(dialog) = &mut self.open_file_dialog {
+                    if dialog.show(ctx).selected() {
+                        if let Some(file) = dialog.path() {
+                            self.opened_file = Some(file.to_path_buf());
+                        }
+                    }
+                }
+
+                ui.label(format!("Opened file: {:?}", self.opened_file));
+
+                ui.separator();
+
+                for title in self.tabs.buffers.keys() {
+                    let tab_location = self.tree.find_tab(title);
+                    let is_open = tab_location.is_some();
+                    if ui.selectable_label(is_open, title).clicked() {
+                        if let Some(tab_location) = tab_location {
+                            self.tree.set_active_tab(tab_location);
+                        } else {
+                            // Open the file for editing:
+                            self.tree.push_to_focused_leaf(title.clone());
+                        }
+                    }
+                }
             });
 
         egui::TopBottomPanel::bottom("bottom_panel").show(ctx, |ui| {
@@ -297,10 +442,20 @@ impl eframe::App for AtlasApp {
                         ui.label(".");
                     });
                 });
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("Check Connection")
+                        .on_hover_text("Check connection to Ollama server.")
+                        .clicked()
+                    {
+                        check_ollama(self, self.tx.clone(), ctx.clone());
+                    }
+                    ui.label(&self.ollama_check);
+                });
                 egui::warn_if_debug_build(ui);
             });
         });
-        chat_window(ctx, self);
+        // chat_window(ctx, self);
         central_panel(ctx, self);
         settings_window(ctx, self);
         about_window(ctx, self);
@@ -364,35 +519,39 @@ fn ollama_send_prompt(app: &AtlasApp, tx: Sender<AsyncMessage>, ctx: egui::Conte
 }
 
 fn central_panel(ctx: &egui::Context, app: &mut AtlasApp) {
-    egui::CentralPanel::default().show(ctx, |ui| {
-        // The central panel the region left after adding TopPanel's and SidePanel's
-        // ui.heading("eframe template");
+    // egui::CentralPanel::default().show(ctx, |ui| {
+    // The central panel the region left after adding TopPanel's and SidePanel's
+    // ui.heading("eframe template");
 
-        // ui.horizontal(|ui| {
-        //     ui.label("Write something: ");
-        //     ui.text_edit_singleline(&mut self.label);
-        // });
+    // ui.horizontal(|ui| {
+    //     ui.label("Write something: ");
+    //     ui.text_edit_singleline(&mut self.label);
+    // });
 
-        // ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
-        // if ui.button("Increment").clicked() {
-        //     self.value += 1.0;
-        // }
+    // ui.add(egui::Slider::new(&mut self.value, 0.0..=10.0).text("value"));
+    // if ui.button("Increment").clicked() {
+    //     self.value += 1.0;
+    // }
 
-        let interaction_settings = &SettingsInteraction::new()
-            .with_dragging_enabled(true)
-            .with_node_clicking_enabled(true)
-            .with_node_selection_enabled(true)
-            .with_node_selection_multi_enabled(true)
-            .with_edge_clicking_enabled(true)
-            .with_edge_selection_enabled(true)
-            .with_edge_selection_multi_enabled(true);
-        let style_settings = &SettingsStyle::new().with_labels_always(true);
-        ui.add(
-            &mut GraphView::<_, _, _, _, DefaultNodeShape, DefaultEdgeShape>::new(&mut app.g)
-                .with_styles(style_settings)
-                .with_interactions(interaction_settings),
-        );
-    });
+    // let interaction_settings = &SettingsInteraction::new()
+    //     .with_dragging_enabled(true)
+    //     .with_node_clicking_enabled(true)
+    //     .with_node_selection_enabled(true)
+    //     .with_node_selection_multi_enabled(true)
+    //     .with_edge_clicking_enabled(true)
+    //     .with_edge_selection_enabled(true)
+    //     .with_edge_selection_multi_enabled(true);
+    // let style_settings = &SettingsStyle::new().with_labels_always(true);
+    // ui.add(
+    //     &mut GraphView::<_, _, _, _, DefaultNodeShape, DefaultEdgeShape>::new(&mut app.g)
+    //         .with_styles(style_settings)
+    //         .with_interactions(interaction_settings),
+    // );
+
+    DockArea::new(&mut app.tree)
+        .style(Style::from_egui(ctx.style().as_ref()))
+        .show(ctx, &mut app.tabs);
+    // });
 
     if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::B)) {
         app.side_panel_open = !app.side_panel_open;
