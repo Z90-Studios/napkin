@@ -11,7 +11,7 @@ mod models;
 mod services;
 use crate::config::NapkinConfig;
 use services::projects;
-use services::vector;
+use services::nodes;
 
 struct AppState {
     app_name: String,
@@ -24,13 +24,8 @@ struct AppState {
     long_about = None,
     before_help = "Project:\n███╗   ██╗ █████╗ ██████╗ ██╗  ██╗██╗███╗   ██╗\n████╗  ██║██╔══██╗██╔══██╗██║ ██╔╝██║████╗  ██║\n██╔██╗ ██║███████║██████╔╝█████╔╝ ██║██╔██╗ ██║\n██║╚██╗██║██╔══██║██╔═══╝ ██╔═██╗ ██║██║╚██╗██║\n██║ ╚████║██║  ██║██║     ██║  ██╗██║██║ ╚████║\n╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝\nA Z90 Studios Project.\n\nCheck out https://z90.studio for documentation and community links.")]
 struct Cli {
-    /// Name of the person to greet
-    #[arg(short, long)]
-    name: String,
-
-    /// Number of times to greet
-    #[arg(short, long, default_value_t = 1)]
-    count: u8,
+    #[arg(short, long, default_value = "28527")]
+    port: String,
 }
 
 #[get("/")]
@@ -46,10 +41,6 @@ async fn main() -> std::io::Result<()> {
 
     let args = Cli::parse();
 
-    for _ in 0..args.count {
-        println!("Hello {}!", args.name)
-    }
-
     let config_ = Config::builder()
         .add_source(::config::Environment::default())
         .build()
@@ -58,6 +49,7 @@ async fn main() -> std::io::Result<()> {
     let config: NapkinConfig = config_.try_deserialize().unwrap();
 
     println!("🚀 {} Started", config.app_name);
+    println!("🔧 Listening on {}:{}", config.server_addr, args.port);
 
     let pool = config.pg.create_pool(None, NoTls).unwrap();
 
@@ -83,11 +75,14 @@ async fn main() -> std::io::Result<()> {
                     .service(projects::delete_project)
             )
             .service(
-                web::scope("/vector")
-                    .service(vector::create_vector)
+                web::scope("/nodes")
+                    .service(nodes::get_nodes)
+                    .service(nodes::get_node)
+                    .service(nodes::post_node)
+                    .service(nodes::delete_node)
             )
     })
-    .bind((config.server_addr, 8080))?
+    .bind(format!("{}:{}", config.server_addr, args.port))?
     .run()
     .await
 }

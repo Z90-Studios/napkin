@@ -20,5 +20,5 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.104"
 tokio-pg-mapper = "0.2.0"
 tokio-pg-mapper-derive = "0.2.0"
-tokio-postgres = "0.7.8"
-uuid = { version = "1.4.1", features = ["v4"] }
+tokio-postgres = { version = "0.7.8", features = ["with-serde_json-1", "with-uuid-1"] }
+uuid = { version = "1.4.1", features = ["v4", "serde", "arbitrary"] }

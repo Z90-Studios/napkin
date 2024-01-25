@@ -19,9 +19,7 @@ log = "0.4"
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
 egui_extras = "0.25.0"
-git2 = "0.18.1"
 reqwest = { version = "0.11.23", features = ["json", "multipart", "blocking"] }
-tokio = { version = "1.35.1", features = ["full"] }
 egui = "0.25.0"
 egui_graphs = { version = "0.17.1", path = "../../../egui_graphs", features = [
     "serde",
@@ -31,6 +29,7 @@ egui_graphs = { version = "0.17.1", path = "../../../egui_graphs", features = [
 petgraph = { version = "0.6.4", features = ["serde"] }
 egui_file = "0.14.0"
 egui_dock = { version = "0.10.0", features = ["serde"] }
+getrandom = { version = "0.2.12", features = ["js"] }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
