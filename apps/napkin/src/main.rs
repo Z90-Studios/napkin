@@ -10,8 +10,7 @@ mod errors;
 mod models;
 mod services;
 use crate::config::NapkinConfig;
-use services::projects;
-use services::nodes;
+use services::{projects, nodes, edges, edge_metadata};
 
 struct AppState {
     app_name: String,
@@ -68,18 +67,31 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(pool.clone()))
             .service(index)
             .service(
-                web::scope("/projects")
+                web::scope("/project")
                     .service(projects::get_projects)
                     .service(projects::get_project)
                     .service(projects::post_project)
                     .service(projects::delete_project)
             )
             .service(
-                web::scope("/nodes")
+                web::scope("/node")
                     .service(nodes::get_nodes)
                     .service(nodes::get_node)
                     .service(nodes::post_node)
                     .service(nodes::delete_node)
+            )
+            .service(
+                web::scope("/edge")
+                    .service(web::scope("/metadata")
+                        .service(edge_metadata::get_edge_metadata)
+                        .service(edge_metadata::get_edge_metadata_singleton)
+                        .service(edge_metadata::post_edge_metadata)
+                        .service(edge_metadata::delete_edge_metadata)
+                    )
+                    .service(edges::get_edges)
+                    .service(edges::get_edge)
+                    .service(edges::post_edge)
+                    .service(edges::delete_edge)
             )
     })
     .bind(format!("{}:{}", config.server_addr, args.port))?

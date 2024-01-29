@@ -19,6 +19,9 @@ pub async fn post_node(body: web::Json<NodeReqObj>, db_pool: web::Data<Pool>) ->
 
     // let embedding: pgvector::Vector = pgvector::Vector::from(body.embedding.clone());
     let project_uuid = uuid::Uuid::parse_str(&body.project);
+
+    // TODO: Check if project exists
+
     if project_uuid.is_err() {
         return Err(NapkinError {
             code: "NODE_NO_ID",
@@ -29,8 +32,6 @@ pub async fn post_node(body: web::Json<NodeReqObj>, db_pool: web::Data<Pool>) ->
     let node_info = Node {
         id: body.id.clone(),
         project: project_uuid.unwrap(),
-        title: body.title.clone(),
-        data: serde_json::Value::String(body.data.clone()),
         // embedding: embedding,
     };
 

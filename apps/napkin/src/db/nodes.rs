@@ -25,7 +25,7 @@ pub async fn get_nodes(client: &Client) -> Result<Vec<Node>, NapkinError> {
 }
 
 pub async fn add_node(client: &Client, node_info: Node) -> Result<Node, NapkinError> {
-    let _stmt = "INSERT INTO nodes(project, title, data) VALUES ($1, $2, $3) RETURNING $node_fields;";
+    let _stmt = "INSERT INTO nodes(project) VALUES ($1) RETURNING $node_fields;";
     let _stmt = _stmt.replace("$node_fields", &Node::sql_table_fields());
     let _stmt = _stmt.replace("id", "id::text");
     println!("{}", &_stmt);
@@ -36,9 +36,6 @@ pub async fn add_node(client: &Client, node_info: Node) -> Result<Node, NapkinEr
                 &stmt,
                 &[
                     &node_info.project,
-                    &node_info.title,
-                    &node_info.data,
-                    // &node_info.embedding,
                 ],
             )
             .await?

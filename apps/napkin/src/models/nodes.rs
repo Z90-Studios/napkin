@@ -6,8 +6,8 @@ use tokio_pg_mapper_derive::PostgresMapper;
 pub struct Node {
     pub id: Option<String>,
     pub project: uuid::Uuid,
-    pub title: String,
-    pub data: serde_json::Value,
+    // pub title: String,
+    // pub data: serde_json::Value,
     // pub embedding: pgvector::Vector,
 }
 
@@ -15,17 +15,17 @@ pub struct Node {
 pub struct NodeReqObj {
     pub id: Option<String>,
     pub project: String,
-    pub title: String,
-    pub data: String,
+    // pub title: String,
+    // pub data: String,
     // pub embedding: Vec<f32>,
 }
 
 impl Node {
     pub fn to_update_str(&self) -> String {
-        let update = "SET project = $project, title = $title, data = $data";
+        let update = "SET project = $project";
         let update = update.replace("$project", &self.project.to_string());
-        let update = update.replace("$title", &self.title);
-        let update = update.replace("$data", &self.data.to_string());
+        // let update = update.replace("$title", &self.title);
+        // let update = update.replace("$data", &self.data.to_string());
 
         // Convert Vector to slice then to string
         // let embedding_as_str = self

@@ -18,8 +18,6 @@ ALTER TABLE projects OWNER TO postgres;
 CREATE TABLE IF NOT EXISTS nodes (
 	id uuid DEFAULT generate_ulid (),
 	project UUID,
-	title TEXT NOT NULL,
-	data JSONB NOT NULL,
 	PRIMARY KEY (id),
 	CONSTRAINT n_project
 		FOREIGN KEY(project)
@@ -31,7 +29,6 @@ CREATE TABLE IF NOT EXISTS edges (
 	project UUID,
 	source UUID,
 	target UUID,
-	data JSONB NOT NULL,
 	PRIMARY KEY (id),
 	CONSTRAINT e_project
 		FOREIGN KEY(project)
@@ -44,6 +41,14 @@ CREATE TABLE IF NOT EXISTS edges (
 			REFERENCES nodes(id)
 );
 
+CREATE TABLE IF NOT EXISTS artifacts (
+	node_id UUID NOT NULL,
+	embedding vector(1024) NOT NULL,
+	CONSTRAINT artifact_pkey PRIMARY KEY (node_id),
+	CONSTRAINT artifact_node_id_fkey FOREIGN KEY (node_id)
+		REFERENCES nodes (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS node_metadata (
 	owner_id UUID NOT NULL,
 	name TEXT NOT NULL,
@@ -51,7 +56,6 @@ CREATE TABLE IF NOT EXISTS node_metadata (
 	CONSTRAINT node_tag_pkey PRIMARY KEY (owner_id, name),
 	CONSTRAINT node_tag_owner_id_fkey FOREIGN KEY (owner_id)
 		REFERENCES nodes (id) ON DELETE CASCADE
-
 );
 
 CREATE TABLE IF NOT EXISTS edge_metadata (
@@ -61,4 +65,13 @@ CREATE TABLE IF NOT EXISTS edge_metadata (
 	CONSTRAINT edge_tag_pkey PRIMARY KEY (owner_id, name),
 	CONSTRAINT edge_tag_owner_id_fkey FOREIGN KEY (owner_id)
 		REFERENCES edges (id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS artifact_metadata (
+	owner_id UUID NOT NULL,
+	name TEXT NOT NULL,
+	value JSONB NOT NULL,
+	CONSTRAINT artifact_tag_pkey PRIMARY KEY (owner_id, name),
+	CONSTRAINT artifact_tag_owner_id_fkey FOREIGN KEY (owner_id)
+		REFERENCES artifacts (node_id) ON DELETE CASCADE
 );
