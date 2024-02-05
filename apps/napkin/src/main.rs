@@ -12,7 +12,7 @@ mod services;
 use crate::config::NapkinConfig;
 use services::{projects, nodes, edges, edge_metadata};
 
-struct AppState {
+pub struct AppState {
     app_name: String,
 }
 
