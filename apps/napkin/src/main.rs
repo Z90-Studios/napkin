@@ -10,7 +10,7 @@ mod errors;
 mod models;
 mod services;
 use crate::config::NapkinConfig;
-use services::{projects, nodes, edges, edge_metadata};
+use services::{projects, nodes, edges, node_metadata, edge_metadata};
 
 pub struct AppState {
     app_name: String,
@@ -75,6 +75,13 @@ async fn main() -> std::io::Result<()> {
             )
             .service(
                 web::scope("/node")
+                    .service(web::scope("/metadata")
+                        .service(node_metadata::get_node_metadata)
+                        .service(node_metadata::get_node_metadata_singleton)
+                        .service(node_metadata::get_node_metadata_singleton_key)
+                        .service(node_metadata::post_node_metadata)
+                        .service(node_metadata::delete_node_metadata)
+                    )
                     .service(nodes::get_nodes)
                     .service(nodes::get_node)
                     .service(nodes::post_node)
@@ -85,6 +92,7 @@ async fn main() -> std::io::Result<()> {
                     .service(web::scope("/metadata")
                         .service(edge_metadata::get_edge_metadata)
                         .service(edge_metadata::get_edge_metadata_singleton)
+                        .service(edge_metadata::get_edge_metadata_singleton_key)
                         .service(edge_metadata::post_edge_metadata)
                         .service(edge_metadata::delete_edge_metadata)
                     )

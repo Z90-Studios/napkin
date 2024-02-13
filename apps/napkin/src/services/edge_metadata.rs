@@ -23,7 +23,7 @@ pub async fn post_edge_metadata(body: web::Json<EdgeMetadataReqObj>, db_pool: we
     if owner_id_uuid.is_err() {
         return Err(NapkinError {
             code: "EDGE_NO_ID",
-            message: "Edge with ID {owner_id_uuid} Not Found",
+            message: "ID `{owner_id_uuid}` Invalid or Not Found",
             root: NapkinErrorRoot::NotFound,
         });
     }
@@ -38,15 +38,25 @@ pub async fn post_edge_metadata(body: web::Json<EdgeMetadataReqObj>, db_pool: we
     Ok(web::Json(new_edge_metadata))
 }
 
+#[get("/{owner_id}")]
+pub async fn get_edge_metadata_singleton(owner_id: web::Path<String>, db_pool: web::Data<Pool>) -> Result<impl Responder, NapkinError> {
+    println!("{}", owner_id);
+    let client: Client = db_pool.get().await.map_err(handle_pool_error)?;
+
+    let edge_metadata = db::edge_metadata::get_edge_metadata_singleton(&client, &owner_id).await?;
+
+    Ok(web::Json(edge_metadata))
+}
+
 #[get("/{owner_id}/{name}")]
-pub async fn get_edge_metadata_singleton(param: web::Path<(String, String)>, db_pool: web::Data<Pool>) -> Result<impl Responder, NapkinError> {
+pub async fn get_edge_metadata_singleton_key(param: web::Path<(String, String)>, db_pool: web::Data<Pool>) -> Result<impl Responder, NapkinError> {
     let (owner_id, name) = param.into_inner();
     println!("{} {}", owner_id, name);
     let client: Client = db_pool.get().await.map_err(handle_pool_error)?;
 
-    let edge = db::edge_metadata::get_edge_metadata_singleton(&client, &owner_id, &name).await?;
+    let edge_metadata_key = db::edge_metadata::get_edge_metadata_singleton_key(&client, &owner_id, &name).await?;
 
-    Ok(web::Json(edge))
+    Ok(web::Json(edge_metadata_key))
 }
 
 #[put("/{owner_id}/{name}")]
@@ -67,3 +77,5 @@ pub async fn delete_edge_metadata(owner_id: web::Path<String>, name: web::Path<S
 
     Ok(web::Json(deleted_edge))
 }
+
+

@@ -61,7 +61,42 @@ pub async fn add_edge_metadata(client: &Client, edge_metadata_info: EdgeMetadata
     }
 }
 
-pub async fn get_edge_metadata_singleton(client: &Client, owner_id: &String, name: &String) -> Result<EdgeMetadata, NapkinError> {
+pub async fn get_edge_metadata_singleton(client: &Client, owner_id: &String) -> Result<Vec<EdgeMetadata>, NapkinError> {
+    let _stmt = "SELECT $edge_metadata_fields FROM edge_metadata WHERE (owner_id = '$owner_id');";
+    let _stmt = _stmt.replace("$edge_metadata_fields", &EdgeMetadata::sql_table_fields());
+    let _stmt = _stmt.replace("$owner_id", owner_id);
+    println!("{}", &_stmt);
+    let _stmt = client.prepare(&_stmt).await;
+    if _stmt.is_err() {
+        println!("{}", _stmt.err().unwrap());
+        return Err(NapkinError {
+            code: "EDGE_METADATA_NO_ID",
+            message: "Edge Metadata with ID ({owner_id}) Not Found",
+            root: NapkinErrorRoot::NotFound,
+        });
+    } else {
+        let stmt = _stmt.unwrap();
+
+        let results = client
+            .query(&stmt, &[])
+            .await?
+            .iter()
+            .map(|row| EdgeMetadata::from_row_ref(row).unwrap())
+            .collect::<Vec<EdgeMetadata>>();
+        
+        if results.is_empty() {
+            Err(NapkinError {
+                code: "EDGE_METADATA_NO_ID",
+                message: "Edge Metadata with ID ({owner_id}, {name}) Not Found",
+                root: NapkinErrorRoot::NotFound,
+            })
+        } else {
+            Ok(results)
+        }
+    }
+}
+
+pub async fn get_edge_metadata_singleton_key(client: &Client, owner_id: &String, name: &String) -> Result<EdgeMetadata, NapkinError> {
     let _stmt = "SELECT $edge_metadata_fields FROM edge_metadata WHERE (owner_id = '$owner_id' AND name = '$name');";
     let _stmt = _stmt.replace("$edge_metadata_fields", &EdgeMetadata::sql_table_fields());
     let _stmt = _stmt.replace("$owner_id", owner_id);
