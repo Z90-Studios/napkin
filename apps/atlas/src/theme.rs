@@ -1,4 +1,5 @@
 use egui::{epaint, style, Color32};
+use serde::{Deserialize, Serialize};
 
 /// Apply the given theme to a [`Context`](egui::Context).
 pub fn set_theme(ctx: &egui::Context, theme: Theme) {
@@ -44,7 +45,7 @@ fn make_widget_visual(
 }
 
 /// The colors for a theme variant.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Theme {
     pub rosewater: Color32,
     pub flamingo: Color32,
@@ -76,7 +77,7 @@ pub struct Theme {
 
 impl Theme {
     fn visuals(&self, old: egui::Visuals) -> egui::Visuals {
-        let is_latte = *self == LATTE;
+        let is_light = *self == LATTE;
         egui::Visuals {
             override_text_color: Some(self.text),
             hyperlink_color: self.rosewater,
@@ -99,7 +100,7 @@ impl Theme {
                 open: make_widget_visual(old.widgets.open, self, self.surface0),
             },
             selection: style::Selection {
-                bg_fill: self.blue.linear_multiply(if is_latte { 0.4 } else { 0.2 }),
+                bg_fill: self.blue.linear_multiply(if is_light { 0.4 } else { 0.2 }),
                 stroke: egui::Stroke {
                     color: self.overlay1,
                     ..old.selection.stroke
@@ -107,14 +108,36 @@ impl Theme {
             },
             window_shadow: epaint::Shadow {
                 color: self.base,
+                extrusion: 4.0,
                 ..old.window_shadow
             },
             popup_shadow: epaint::Shadow {
                 color: self.base,
                 ..old.popup_shadow
             },
-            dark_mode: !is_latte,
+            dark_mode: !is_light,
             ..old
+        }
+    }
+}
+
+
+#[derive(PartialEq, Serialize, Deserialize)]
+pub enum ColorScheme {
+    Light {
+        theme: Theme,
+
+    },
+    Dark {
+        theme: Theme,
+    },
+}
+
+impl ColorScheme {
+    pub fn theme(&self) -> &Theme {
+        match self {
+            ColorScheme::Light { theme } => theme,
+            ColorScheme::Dark { theme } => theme,
         }
     }
 }
@@ -149,30 +172,30 @@ pub const LATTE: Theme = Theme {
 };
 
 pub const MACCHIATO: Theme = Theme {
-    rosewater: Color32::from_rgb(244, 219, 214),
-    flamingo: Color32::from_rgb(240, 198, 198),
-    pink: Color32::from_rgb(245, 189, 230),
-    mauve: Color32::from_rgb(198, 160, 246),
-    red: Color32::from_rgb(237, 135, 150),
-    maroon: Color32::from_rgb(238, 153, 160),
-    peach: Color32::from_rgb(245, 169, 127),
-    yellow: Color32::from_rgb(238, 212, 159),
-    green: Color32::from_rgb(166, 218, 149),
-    teal: Color32::from_rgb(139, 213, 202),
-    sky: Color32::from_rgb(145, 215, 227),
-    sapphire: Color32::from_rgb(125, 196, 228),
-    blue: Color32::from_rgb(138, 173, 244),
-    lavender: Color32::from_rgb(183, 189, 248),
-    text: Color32::from_rgb(202, 211, 245),
-    subtext1: Color32::from_rgb(184, 192, 224),
-    subtext0: Color32::from_rgb(165, 173, 203),
-    overlay2: Color32::from_rgb(147, 154, 183),
-    overlay1: Color32::from_rgb(128, 135, 162),
-    overlay0: Color32::from_rgb(110, 115, 141),
-    surface2: Color32::from_rgb(91, 96, 120),
-    surface1: Color32::from_rgb(73, 77, 100),
-    surface0: Color32::from_rgb(54, 58, 79),
-    base: Color32::from_rgb(36, 39, 58),
-    mantle: Color32::from_rgb(30, 32, 48),
-    crust: Color32::from_rgb(24, 25, 38),
+    rosewater: Color32::from_rgb(244, 219, 214), // 244, 219, 214
+    flamingo: Color32::from_rgb(240, 198, 198), // 240, 198, 198
+    pink: Color32::from_rgb(245, 189, 230), // 245, 189, 230
+    mauve: Color32::from_rgb(198, 160, 246), // 198, 160, 246
+    red: Color32::from_rgb(237, 135, 150), // 237, 135, 150
+    maroon: Color32::from_rgb(238, 153, 160), // 238, 153, 160
+    peach: Color32::from_rgb(245, 169, 127), // 245, 169, 127
+    yellow: Color32::from_rgb(238, 212, 159), // 238, 212, 159
+    green: Color32::from_rgb(166, 218, 149), // 166, 218, 149
+    teal: Color32::from_rgb(139, 213, 202), // 139, 213, 202
+    sky: Color32::from_rgb(145, 215, 227), // 145, 215, 227
+    sapphire: Color32::from_rgb(125, 196, 228), // 125, 196, 228
+    blue: Color32::from_rgb(138, 173, 244), // 138, 173, 244
+    lavender: Color32::from_rgb(183, 189, 248), // 183, 189, 248
+    text: Color32::from_rgb(202, 211, 245), // 202, 211, 245
+    subtext1: Color32::from_rgb(184, 192, 224), // 184, 192, 224
+    subtext0: Color32::from_rgb(165, 173, 203), // 165, 173, 203
+    overlay2: Color32::from_rgb(147, 154, 183), // 147, 154, 183
+    overlay1: Color32::from_rgb(128, 135, 162), // 128, 135, 162
+    overlay0: Color32::from_rgb(110, 115, 141), // 110, 115, 141
+    surface2: Color32::from_rgb(91, 96, 120), // 91, 96, 120
+    surface1: Color32::from_rgb(73, 77, 100), // 73, 77, 100
+    surface0: Color32::from_rgb(54, 58, 79), // 54, 58, 79
+    base: Color32::from_rgb(36, 39, 58), // 36, 39, 58
+    mantle: Color32::from_rgb(30, 32, 48), // 30, 32, 48
+    crust: Color32::from_rgb(24, 25, 38), // 24, 25, 38
 };
