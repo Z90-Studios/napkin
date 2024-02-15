@@ -22,6 +22,24 @@ impl Default for NapkinGraph {
 pub struct AtlasContext {
     #[serde(skip)]
     pub g: NapkinGraph,
+    pub sim: Simulation<(), f32>,
+
+    pub graph_sim_stopped: bool,
+
+    pub graph_settings: GraphSettings,
+
+    pub last_events: Vec<String>,
+
+    pub fps: f64,
+    pub last_update_time: Instant,
+    pub frames_last_time_span: usize,
+
+    pub event_publisher: Sender<Event>,
+    pub event_consumer: Receiver<Event>,
+
+    pub pan: Option<[f32; 2]>,
+    pub zoom: Option<f32>,
+
     pub color_scheme: ColorScheme,
     pub side_panel_open: bool,
     pub settings_window_open: bool,
