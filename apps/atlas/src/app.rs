@@ -103,6 +103,17 @@ impl AtlasApp {
         Default::default()
     }
 
+    pub fn update_fps(&mut self) {
+        self.frames_last_time_span += 1;
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_update_time);
+        if elapsed.as_secs() >= 1 {
+            self.last_update_time = now;
+            self.fps = self.frames_last_time_span as f64 / elapsed.as_secs_f64();
+            self.frames_last_time_span = 0;
+        }
+    }
+
     // pub fn submit_prompt(&mut self, ctx: &egui::Context) {
     //     self.chat_history.push(ChatHistory {
     //         instance: 0,
