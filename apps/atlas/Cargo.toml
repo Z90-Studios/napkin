@@ -1,53 +1,10 @@
 [package]
 name = "atlas"
 version = "0.1.0"
-authors = ["J. Zane Cook <jzanecook@z90.studio>"]
 edition = "2021"
-rust-version = "1.72"
-license = "MIT"
-
 
 [dependencies]
-eframe = { version = "0.26.2", default-features = false, features = ["accesskit", "default_fonts", "glow", "persistence"] }
-log = "0.4"
-
-# You only need serde if you want app persistence:
-serde = { version = "1", features = ["derive"] }
-egui_extras = "0.26.2"
-reqwest = { version = "0.11.23", features = ["json", "multipart", "blocking"] }
-egui = "0.26.2"
-petgraph = { version = "0.6.4", features = ["serde"] }
-egui_file = "0.16.3"
-egui_dock = { version = "0.11.2", features = ["serde"] }
-getrandom = { version = "0.2.12", features = ["js"] }
-uuid = { version = "1.4.1", features = ["arbitrary", "v4", "serde"] }
-serde_json = "1.0.113"
-instant = { version = "0.1", features = ["wasm-bindgen"] }
-egui_graphs = { version = "0.19.0", features = ["serde", "egui_persistence", "events"] }
-
-# native:
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-env_logger = "0.11.3"
-
-# web:
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4"
-
-
-[profile.release]
-opt-level = 2 # fast and small wasm
-
-# Optimize all dependencies even in debug builds:
-[profile.dev.package."*"]
-opt-level = 2
-
-
-[patch.crates-io]
-
-# If you want to use the bleeding edge version of egui and eframe:
-# egui = { git = "https://github.com/emilk/egui", branch = "master" }
-# eframe = { git = "https://github.com/emilk/egui", branch = "master" }
-
-# If you fork https://github.com/emilk/egui you can test with:
-# egui = { path = "../egui/crates/egui" }
-# eframe = { path = "../egui/crates/eframe" }
+bevy = "0.13.2"
+bevy_egui = "0.26.0"
+bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
+rand = "0.8.5"
