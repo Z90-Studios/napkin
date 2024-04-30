@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.13.2"
-bevy_egui = "0.27.0"
+bevy_egui = "0.27.0" 
 bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
 bevy_rapier3d = "0.25.0"
 smooth-bevy-cameras = { git = "https://github.com/bonsairobo/smooth-bevy-cameras", branch = "main" }
@@ -17,4 +17,85 @@ bevy_http_client = "0.5.2"
 serde = "1.0.198"
 
 [profile.dev.package."*"]
-opt-level = 3
+opt-level = 1
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = [
+  # LLD linker
+  #
+  # You may need to install it:
+  #
+  # - Ubuntu: `sudo apt-get install lld clang`
+  # - Fedora: `sudo dnf install lld clang`
+  # - Arch: `sudo pacman -S lld clang`
+  "-Clink-arg=-fuse-ld=lld",
+
+  # Mold linker
+  #
+  # You may need to install it:
+  #
+  # - Ubuntu: `sudo apt-get install mold clang`
+  # - Fedora: `sudo dnf install mold clang`
+  # - Arch: `sudo pacman -S mold clang`
+  # "-Clink-arg=-fuse-ld=/usr/bin/mold",
+
+  # Nightly
+  # "-Zshare-generics=y",
+  # "-Zthreads=0",
+]
+
+[target.x86_64-apple-darwin]
+rustflags = [
+  # LLD linker
+  #
+  # The default ld64 linker is faster, you should continue using it instead.
+  #
+  # You may need to install it:
+  #
+  # Brew: `brew install llvm`
+  # Manually: <https://lld.llvm.org/MachO/index.html>
+  # "-Clink-arg=-fuse-ld=/usr/local/opt/llvm/bin/ld64.lld",
+
+  # Nightly
+  # "-Zshare-generics=y",
+  # "-Zthreads=0",
+]
+
+[target.aarch64-apple-darwin]
+rustflags = [
+  # LLD linker
+  #
+  # The default ld64 linker is faster, you should continue using it instead.
+  #
+  # You may need to install it:
+  #
+  # Brew: `brew install llvm`
+  # Manually: <https://lld.llvm.org/MachO/index.html>
+  # "-Clink-arg=-fuse-ld=/opt/homebrew/opt/llvm/bin/ld64.lld",
+
+  # Nightly
+  # "-Zshare-generics=y",
+  # "-Zthreads=0",
+]
+
+[target.x86_64-pc-windows-msvc]
+# LLD linker
+#
+# You may need to install it:
+#
+# ```
+# cargo install -f cargo-binutils
+# rustup component add llvm-tools
+# ```
+linker = "rust-lld.exe"
+rustflags = [
+  # Nightly
+  # "-Zshare-generics=y",
+  # "-Zthreads=0",
+]
+
+# Optional: Uncommenting the following improves compile times, but reduces the amount of debug info to 'line number tables only'
+# In most cases the gains are negligible, but if you are on macos and have slow compile times you should see significant gains.
+# [profile.dev]
+# debug = 1

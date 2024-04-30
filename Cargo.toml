@@ -1,5 +1,0 @@
-[workspace]
-members = [
-    "apps/napkin",
-    "apps/atlas"
-]
