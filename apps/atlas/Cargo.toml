@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.13.2"
-bevy_egui = "0.26.0"
+bevy_egui = "0.27.0"
 bevy_infinite_grid = { git = "https://github.com/ForesightMiningSoftwareCorporation/bevy_infinite_grid", branch = "main" }
 bevy_rapier3d = "0.25.0"
 smooth-bevy-cameras = { git = "https://github.com/bonsairobo/smooth-bevy-cameras", branch = "main" }

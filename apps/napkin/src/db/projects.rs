@@ -72,7 +72,7 @@ pub async fn update_project(
     project_id: &String,
     project_info: Project,
 ) -> Result<Project, NapkinError> {
-    let _stmt = "UPDATE projects SET $updates WHERE id = ANY ('{$id}') RETURNING $project_fields;";
+    let _stmt = "UPDATE projects $updates WHERE id = ANY ('{$id}') RETURNING $project_fields;";
     let _stmt = _stmt.replace("$project_fields", &Project::sql_table_fields());
     let _stmt = _stmt.replace("id", "id::text");
     let _stmt = _stmt.replace("$id", project_id);

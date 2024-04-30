@@ -1,4 +1,5 @@
 use deadpool_postgres::Client;
+use log::info;
 use tokio_pg_mapper::FromTokioPostgresRow;
 
 use crate::{
@@ -134,12 +135,12 @@ pub async fn update_edge_metadata(
     name: &String,
     edge_metadata_info: EdgeMetadata,
 ) -> Result<EdgeMetadata, NapkinError> {
-    let _stmt = "UPDATE edge_metadata SET $updates WHERE id = ANY ('{$owner_id}', '{$name}') RETURNING $edge_metadata_fields;";
+    let _stmt = "UPDATE edge_metadata $updates WHERE (owner_id = '$owner_id' AND name = '$name') RETURNING $edge_metadata_fields;";
     let _stmt = _stmt.replace("$edge_metadata_fields", &EdgeMetadata::sql_table_fields());
-    let _stmt = _stmt.replace("owner_id", "owner_id::text");
     let _stmt = _stmt.replace("$owner_id", owner_id);
     let _stmt = _stmt.replace("$name", name);
     let _stmt = _stmt.replace("$updates", &EdgeMetadata::to_update_str(&edge_metadata_info));
+    info!("{}", _stmt);
     let stmt = client.prepare(&_stmt).await.unwrap();
     println!("{}", &_stmt);
 

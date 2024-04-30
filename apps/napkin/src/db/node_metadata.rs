@@ -134,7 +134,7 @@ pub async fn update_node_metadata(
     name: &String,
     node_metadata_info: NodeMetadata,
 ) -> Result<NodeMetadata, NapkinError> {
-    let _stmt = "UPDATE node_metadata SET $updates WHERE id = ANY ('{$owner_id}', '{$name}') RETURNING $node_metadata_fields;";
+    let _stmt = "UPDATE node_metadata $updates WHERE id = ANY ('{$owner_id}', '{$name}') RETURNING $node_metadata_fields;";
     let _stmt = _stmt.replace("$node_metadata_fields", &NodeMetadata::sql_table_fields());
     let _stmt = _stmt.replace("owner_id", "owner_id::text");
     let _stmt = _stmt.replace("$owner_id", owner_id);

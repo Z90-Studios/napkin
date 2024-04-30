@@ -88,7 +88,7 @@ pub async fn update_edge(
     edge_id: &String,
     edge_info: Edge,
 ) -> Result<Edge, NapkinError> {
-    let _stmt = "UPDATE edges SET $updates WHERE id = ANY ('{$id}') RETURNING $edge_fields;";
+    let _stmt = "UPDATE edges $updates WHERE id = ANY ('{$id}') RETURNING $edge_fields;";
     let _stmt = _stmt.replace("$edge_fields", &Edge::sql_table_fields());
     let _stmt = _stmt.replace("id", "id::text");
     let _stmt = _stmt.replace("$id", edge_id);

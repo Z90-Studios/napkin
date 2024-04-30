@@ -86,7 +86,7 @@ pub async fn update_node(
     node_id: &String,
     node_info: Node,
 ) -> Result<Node, NapkinError> {
-    let _stmt = "UPDATE nodes SET $updates WHERE id = ANY ('{$id}') RETURNING $node_fields;";
+    let _stmt = "UPDATE nodes $updates WHERE id = ANY ('{$id}') RETURNING $node_fields;";
     let _stmt = _stmt.replace("$node_fields", &Node::sql_table_fields());
     let _stmt = _stmt.replace("id", "id::text");
     let _stmt = _stmt.replace("$id", node_id);

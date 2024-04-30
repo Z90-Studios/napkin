@@ -4,7 +4,6 @@ use bevy::{
     core_pipeline::bloom::BloomSettings,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
-    time::common_conditions::on_timer,
 };
 use bevy_egui::{
     egui::{self, Color32},
@@ -165,30 +164,7 @@ fn configure_visuals_system(mut contexts: EguiContexts) {
     contexts.ctx_mut().set_visuals(atlas_visuals);
 }
 
-// fn handle_response(
-//     mut commands: Commands,
-//     mut meshes: ResMut<Assets<Mesh>>,
-//     mut materials: ResMut<Assets<StandardMaterial>>,
-//     mut napkin: ResMut<NapkinSettings>,
-//     mut ev_response: EventReader<TypedResponse<Vec<NapkinNode>>>,
-// ) {
-//     for response in ev_response.read() {
-//         napkin.nodes = response.to_vec();
-//         for node in napkin.nodes.iter() {
-//             spawn_node(
-//                 commands,
-//                 meshes,
-//                 materials,
-//                 node.clone()
-//             );
-//         }
-//     }
-// }
-
 fn setup_ui(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut napkin: ResMut<NapkinSettings>,
     diagnostics: Res<DiagnosticsStore>,
     mut contexts: EguiContexts,
@@ -333,14 +309,6 @@ fn setup_system(mut commands: Commands) {
             Vec3::new(0., 0., 0.),
             Vec3::Y,
         ));
-    // commands.spawn((
-    //     Camera3dBundle {
-    //         transform: Transform::from_xyz(-5.0, 20.0, 10.0)
-    //             .looking_at(Vec3::ZERO, Vec3::Y),
-    //         ..default()
-    //     },
-    //     CameraController::default(),
-    // ));
     commands.spawn(InfiniteGridBundle {
         settings: InfiniteGridSettings {
             x_axis_color: Color::rgb(0.8, 0.8, 0.8),

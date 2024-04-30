@@ -5,15 +5,10 @@ use bevy_rapier3d::{
     geometry::{Collider, CollisionGroups, Group, SolverGroups},
     pipeline::QueryFilter,
     plugin::RapierContext,
-    rapier::{
-        dynamics::{RigidBodyBuilder, RigidBodySet, RigidBodyType},
-        geometry::{ColliderBuilder, InteractionGroups},
-    },
-    render::ColliderDebugColor,
 };
 use std::fmt;
 
-use crate::{camera_controller::*, NapkinNode, NapkinSettings};
+use crate::{NapkinNode, NapkinSettings};
 
 pub struct NodeControllerPlugin;
 
@@ -78,9 +73,6 @@ pub fn run_node_controller(
         let start = node_pos.translation;
         let forward = start - target.translation;
         node_pos.look_at(start + forward, Vec3::Y);
-        // if node_controller.position != global_transform.translation() {
-        // info!("Position has changed");
-        // }
         node_controller.position = global_transform.translation();
     }
 
@@ -250,16 +242,12 @@ pub fn node_spawner(
                     rand::random::<f32>() * 10. - 5.,
                     rand::random::<f32>() * 1. - 0.5,
                     rand::random::<f32>() * 10. - 5.,
-                    // if node.id == "018d41d7-9f8e-0e88-5a19-8ccc64bcbfe6" { 5. } else { -3. },
-                    // if node.id == "018d41d7-9f8e-0e88-5a19-8ccc64bcbfe6" { 3. } else { -2. },
-                    // if node.id == "018d41d7-9f8e-0e88-5a19-8ccc64bcbfe6" { -5. } else { 5. },
                 );
                 let transform = Transform::from_translation(start_point);
                 commands
                     .spawn((
                         PbrBundle {
                             mesh: meshes.add(Mesh::from(Circle { radius: 0.1 })),
-                            // mesh: meshes.add(Mesh::from(Sphere { radius: 0.1 })),
                             material: materials.add(StandardMaterial {
                                 base_color: Color::WHITE,
                                 unlit: true,
@@ -280,9 +268,6 @@ pub fn node_spawner(
                     ))
                     .insert(CollisionGroups::new(Group::GROUP_13, Group::GROUP_4))
                     .insert(SolverGroups::new(Group::GROUP_3, Group::GROUP_11));
-
-                // .insert(CollisionGroups::new(0b1101.into(), 0b0100.into()))
-                // .insert(SolverGroups::new(0b0011.into(), 0b1011.into()));
             }
         }
     }

@@ -16,9 +16,16 @@ pub struct EdgeMetadataReqObj {
     pub value: serde_json::Value,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct EdgeMetadataUpdate {
+    pub owner_id: Option<uuid::Uuid>,
+    pub name: Option<String>,
+    pub value: Option<serde_json::Value>,
+}
+
 impl EdgeMetadata {
     pub fn to_update_str(&self) -> String {
-        let update = "SET owner_id = $owner_id, name = $name, value = $value";
+        let update = "SET owner_id = '$owner_id', name = '$name', value = '$value'";
         let update = update.replace("$owner_id", &self.owner_id.to_string());
         let update = update.replace("$name", &self.name);
         let update = update.replace("$value", &self.value.to_string());
