@@ -9,8 +9,10 @@ CREATE OR REPLACE FUNCTION generate_ulid() RETURNS uuid
 
 CREATE TABLE IF NOT EXISTS projects (
 	id uuid DEFAULT generate_ulid (),
+	scope TEXT NOT NULL,
 	name TEXT NOT NULL,
-	PRIMARY KEY (id)
+	PRIMARY KEY (id),
+	UNIQUE (scope, name)
 );
 
 ALTER TABLE projects OWNER TO postgres;

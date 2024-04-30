@@ -25,14 +25,14 @@ pub async fn get_projects(client: &Client) -> Result<Vec<Project>, NapkinError> 
 }
 
 pub async fn add_project(client: &Client, project_info: Project) -> Result<Project, NapkinError> {
-    let _stmt = "INSERT INTO projects(name) VALUES ($1) RETURNING $project_fields;";
+    let _stmt = "INSERT INTO projects(scope, name) VALUES ($1, $2) RETURNING $project_fields;";
     let _stmt = _stmt.replace("$project_fields", &Project::sql_table_fields());
     let _stmt = _stmt.replace("id", "id::text");
     let stmt = client.prepare(&_stmt).await.unwrap();
     println!("{}", &_stmt);
 
     client
-        .query(&stmt, &[&project_info.name])
+        .query(&stmt, &[&project_info.scope, &project_info.name])
         .await?
         .iter()
         .map(|row| Project::from_row_ref(row).unwrap())
