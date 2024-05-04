@@ -1,5 +1,5 @@
 use bevy::{prelude::*, render::mesh::shape::Icosphere};
-use smooth_bevy_cameras::LookTransform;
+use smooth_bevy_cameras::{controllers::orbit::OrbitCameraController, LookTransform};
 use std::fmt;
 
 use crate::{NapkinCrosshair, NapkinCrosshairSelectionTypes, NapkinSettings};
@@ -60,7 +60,7 @@ pub fn run_crosshair_controller(
     time: Res<Time>,
     mut crosshair_query: Query<(&mut Transform, &CrosshairController), Without<Camera>>,
     nodes: Query<(&GlobalTransform, &NodeController)>,
-    mut camera: Query<&mut LookTransform, With<Camera>>,
+    mut camera: Query<(&mut Transform, &mut LookTransform), With<Camera>>,
 ) {
     let rotation_speed = 1.0; // Rotation speed in radians per second
     let movement_speed = 5.0; // Movement speed units per second
@@ -79,9 +79,11 @@ pub fn run_crosshair_controller(
                     let dynamic_speed = movement_speed * distance; // Increase speed based on distance
                     transform.translation +=
                         direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
-                    // for mut camera_transform in camera.iter_mut() {
-                    //     camera_transform.target = direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
-                    // }
+                    for (mut camera_transform, mut look_transform) in camera.iter_mut() {
+                        camera_transform.translation += direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
+                        look_transform.eye += direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
+                        look_transform.target += direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
+                    }
                 }
             }
         }

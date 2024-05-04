@@ -15,6 +15,7 @@ ehttp = { version = "0.5.0", features = ["json"] }
 serde_json = "1.0.116"
 bevy_http_client = "0.5.2"
 serde = "1.0.198"
+egui_plot = "0.27.2"
 
 [profile.dev.package."*"]
 opt-level = 1

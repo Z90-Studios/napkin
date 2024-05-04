@@ -5,7 +5,7 @@
 
 use bevy::input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
-use bevy::window::CursorGrabMode;
+use bevy::window::{CursorGrabMode, PrimaryWindow};
 use smooth_bevy_cameras::controllers::orbit::{OrbitCameraController, ControlEvent};
 use std::{f32::consts::*, fmt};
 
@@ -107,7 +107,7 @@ Freecam Controls:
 #[allow(clippy::too_many_arguments)]
 pub fn run_camera_controller(
     time: Res<Time>,
-    mut windows: Query<&mut Window>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut mouse_events: EventReader<MouseMotion>,
     mut scroll_events: EventReader<MouseWheel>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
@@ -118,6 +118,7 @@ pub fn run_camera_controller(
     mut mouse_cursor_orbit: Local<bool>,
     mut query: Query<(&mut Transform, &mut CameraController), With<Camera>>,
 ) {
+    let mut primary_window = windows.single_mut();
     let dt = time.delta_seconds();
 
     if let Ok((mut transform, mut controller)) = query.get_single_mut() {
@@ -168,9 +169,9 @@ pub fn run_camera_controller(
         let mouse_border_offset = 5.0;
 
         if let (Some(mouse_position), window_height, window_width) = (
-            windows.single().cursor_position(),
-            windows.single().height(),
-            windows.single().width(),
+            primary_window.cursor_position(),
+            primary_window.height(),
+            primary_window.width(),
         ) {
             if (!*mouse_cursor_grab && !*toggle_cursor_grab)
                 && (mouse_position.x < occupied_screen_space.left + mouse_border_offset
@@ -251,19 +252,13 @@ pub fn run_camera_controller(
         // Handle cursor grab
         if cursor_grab_change {
             if cursor_grab {
-                for mut window in &mut windows {
-                    if !window.focused {
-                        continue;
-                    }
-
-                    window.cursor.grab_mode = CursorGrabMode::Locked;
-                    window.cursor.visible = false;
+                if !primary_window.focused {
+                    primary_window.cursor.grab_mode = CursorGrabMode::Locked;
+                    primary_window.cursor.visible = false;
                 }
             } else {
-                for mut window in &mut windows {
-                    window.cursor.grab_mode = CursorGrabMode::None;
-                    window.cursor.visible = true;
-                }
+                primary_window.cursor.grab_mode = CursorGrabMode::None;
+                primary_window.cursor.visible = true;
             }
         }
 
@@ -291,12 +286,14 @@ pub fn run_camera_controller(
 
 pub fn atlas_orbit_camera_input_map(
     mut events: EventWriter<ControlEvent>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut mouse_wheel_reader: EventReader<MouseWheel>,
     mut mouse_motion_events: EventReader<MouseMotion>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     controllers: Query<&OrbitCameraController>,
 ) {
+    let mut primary_window = windows.single_mut();
     // Can only control one camera at a time.
     let controller = if let Some(controller) = controllers.iter().find(|c| c.enabled) {
         controller
@@ -315,9 +312,19 @@ pub fn atlas_orbit_camera_input_map(
     for event in mouse_motion_events.read() {
         cursor_delta += event.delta;
     }
-
-    if keyboard.pressed(KeyCode::ControlLeft) {
+    
+    let mut cursor_grab = false;
+    if mouse_buttons.pressed(MouseButton::Right) {
         events.send(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));
+        cursor_grab = true;
+    }
+
+    if cursor_grab {
+        primary_window.cursor.grab_mode = CursorGrabMode::Locked;
+        primary_window.cursor.visible = false;
+    } else {
+        primary_window.cursor.grab_mode = CursorGrabMode::None;
+        primary_window.cursor.visible = true;
     }
 
     // if mouse_buttons.pressed(MouseButton::Right) {
