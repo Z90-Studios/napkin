@@ -5,7 +5,6 @@ use deadpool_postgres::PoolConfig;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NapkinConfig {
     pub app_name: String,
-    pub server_addr: String,
     pub pg: deadpool_postgres::Config,
 }
 
@@ -13,7 +12,6 @@ impl Default for NapkinConfig {
     fn default() -> Self {
         Self {
             app_name: "Project: Napkin".to_string(),
-            server_addr: "127.0.0.1".to_string(),
             pg: deadpool_postgres::Config {
                 host: Some("127.0.0.1".to_string()),
                 port: Some(5438),

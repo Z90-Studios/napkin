@@ -23,6 +23,8 @@ pub struct AppState {
     long_about = None,
     before_help = "Project:\n███╗   ██╗ █████╗ ██████╗ ██╗  ██╗██╗███╗   ██╗\n████╗  ██║██╔══██╗██╔══██╗██║ ██╔╝██║████╗  ██║\n██╔██╗ ██║███████║██████╔╝█████╔╝ ██║██╔██╗ ██║\n██║╚██╗██║██╔══██║██╔═══╝ ██╔═██╗ ██║██║╚██╗██║\n██║ ╚████║██║  ██║██║     ██║  ██╗██║██║ ╚████║\n╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝\nA Z90 Studios Project.\n\nCheck out https://z90.studio for documentation and community links.")]
 struct Cli {
+    #[arg(short, long, default_value = "0.0.0.0")]
+    host: String,
     #[arg(short, long, default_value = "28527")]
     port: String,
 }
@@ -48,7 +50,7 @@ async fn main() -> std::io::Result<()> {
     let config: NapkinConfig = config_.try_deserialize().unwrap_or(NapkinConfig::default());
 
     println!("🚀 {} Started", config.app_name);
-    println!("🔧 Listening on {}:{}", config.server_addr, args.port);
+    println!("🔧 Listening on {}:{}", args.host, args.port);
 
     let pool = config.pg.create_pool(None, NoTls).unwrap();
 
@@ -107,7 +109,7 @@ async fn main() -> std::io::Result<()> {
                     .service(edges::delete_edge)
             )
     })
-    .bind(format!("{}:{}", config.server_addr, args.port))?
+    .bind(format!("{}:{}", args.host, args.port))?
     .run()
     .await
 }
