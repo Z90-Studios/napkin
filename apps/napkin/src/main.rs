@@ -45,7 +45,7 @@ async fn main() -> std::io::Result<()> {
         .build()
         .unwrap();
 
-    let config: NapkinConfig = config_.try_deserialize().unwrap();
+    let config: NapkinConfig = config_.try_deserialize().unwrap_or(NapkinConfig::default());
 
     println!("🚀 {} Started", config.app_name);
     println!("🔧 Listening on {}:{}", config.server_addr, args.port);
