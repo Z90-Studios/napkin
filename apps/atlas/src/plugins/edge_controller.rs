@@ -1,11 +1,16 @@
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::{
+    prelude::*,
+    window::{CursorGrabMode, PrimaryWindow},
+};
 use bevy_egui::{
-    egui::{self, Color32},
+    egui::{self, Color32, CursorIcon},
     EguiContexts,
 };
 use bevy_http_client::prelude::TypedResponse;
 use bevy_rapier3d::{
-    dynamics::{GravityScale, ImpulseJoint, RapierRigidBodyHandle, RigidBody, SphericalJoint, SphericalJointBuilder},
+    dynamics::{
+        FixedJoint, GravityScale, ImpulseJoint, RapierRigidBodyHandle, RigidBody, RopeJointBuilder, SphericalJoint, SphericalJointBuilder
+    },
     geometry::{Collider, CollisionGroups, Group, SolverGroups},
     pipeline::QueryFilter,
     plugin::RapierContext,
@@ -20,7 +25,13 @@ pub struct EdgeControllerPlugin;
 
 impl Plugin for EdgeControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (run_edge_controller, edge_tooltip));
+        app.add_systems(Update, (
+            run_edge_controller,
+            cast_ray,
+            edge_tooltip,
+            edge_spawner,
+            edge_destroyer
+        ));
     }
 }
 
@@ -84,21 +95,25 @@ pub fn run_edge_controller(
             (global_transform.translation(), node_controller.id.clone())
         })
         .collect();
-    for (mut edge_pos, edge_controller) in data_set.p1().iter_mut() {
-        let source_node_id = edge_controller.source.clone();
-        let target_node_id = edge_controller.target.clone();
-        let source = nodes
-            .iter()
-            .find(|(_, id)| id == &source_node_id)
-            .map(|(pos, _)| *pos)
-            .unwrap_or(Vec3::ZERO);
+    // for (mut edge_pos, edge_controller) in data_set.p1().iter_mut() {
+    //     let source_node_id = edge_controller.source.clone();
+    //     let target_node_id = edge_controller.target.clone();
+    //     let source = nodes
+    //         .iter()
+    //         .find(|(_, id)| id == &source_node_id)
+    //         .map(|(pos, _)| *pos)
+    //         .unwrap_or(Vec3::ZERO);
 
-        let target = nodes
-            .iter()
-            .find(|(_, id)| id == &target_node_id)
-            .map(|(pos, _)| *pos)
-            .unwrap_or(Vec3::ZERO);
-    }
+    //     let target = nodes
+    //         .iter()
+    //         .find(|(_, id)| id == &target_node_id)
+    //         .map(|(pos, _)| *pos)
+    //         .unwrap_or(Vec3::ZERO);
+
+    //     // edge_pos.translation = (source + target) / 2.0;
+    //     // let direction = target - source;
+    //     // edge_pos.rotation = Quat::from_rotation_arc(Vec3::Y, direction.normalize());
+    // }
 
     let mut new_selected_edges: Vec<NapkinEdge> = Vec::new();
     for (_, edge_controller) in selected_edges.iter_mut() {
@@ -118,7 +133,9 @@ pub fn cast_ray(
     rapier_context: Res<RapierContext>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     existing_hover: Query<Entity, With<HoveredEdge>>,
+    mut contexts: EguiContexts,
 ) {
+    let ctx = contexts.ctx_mut();
     let window = windows.single();
 
     let Some(cursor_position) = window.cursor_position() else {
@@ -130,6 +147,11 @@ pub fn cast_ray(
         let Some(ray) = camera.viewport_to_world(camera_transform, cursor_position) else {
             return;
         };
+
+        // Don't register hits when rotating camera
+        if window.cursor.grab_mode == CursorGrabMode::Locked {
+            return;
+        }
 
         // Cast a ray for nodes, so we know not to trigger edge clicking when the node is hit
         let node_hit = rapier_context.cast_ray(
@@ -149,15 +171,21 @@ pub fn cast_ray(
             QueryFilter::new().groups(CollisionGroups::new(Group::ALL, Group::GROUP_14)),
         );
 
+        
+
         if let None = node_hit {
             if let Some((entity, _toi)) = hit {
                 commands.entity(entity).insert(HoveredEdge);
+                ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
             }
         }
 
         for entity in existing_hover.iter() {
             if let Some((hit_entity, _)) = hit {
                 if entity != hit_entity {
+                    commands.entity(entity).remove::<HoveredEdge>();
+                }
+                if let Some((_hit_node, _)) = node_hit {
                     commands.entity(entity).remove::<HoveredEdge>();
                 }
             } else {
@@ -293,6 +321,7 @@ pub fn edge_spawner(
         if existing_edges
             .iter()
             .all(|existing_edge| existing_edge.id != edge.id)
+            && edge.project == napkin.selected_project.clone().unwrap_or(edge.project.clone())
         {
             info!("Adding edge of ID {}", edge.id);
             let mut source_node = None;
@@ -306,10 +335,6 @@ pub fn edge_spawner(
             }
             if let Some((source_entity, source)) = source_node {
                 if let Some((target_entity, target)) = target_node {
-                    // Had to do some funky math here
-                    // Cuboid spawns long-wise along the Y-axis (top to bottom)
-                    // The following transform will make it "look at" the sky (inverse of the path between nodes)
-                    // all so that the cuboid will be oriented in the right direction
                     let direction = (target.position - source.position).normalize();
                     let line_length = (source.position - target.position).length();
                     let line_transform =
@@ -331,6 +356,12 @@ pub fn edge_spawner(
                         unlit: true,
                         ..Default::default()
                     });
+
+                    let rope = RopeJointBuilder::new(2.0)
+                        .local_anchor1(Vec3::new(0.0, line_length / 2., 0.0))
+                        .local_anchor2(Vec3::new(0.0, -line_length / 2., 0.0));
+                    let joint = ImpulseJoint::new(source_entity, rope);
+
                     commands
                         .spawn((
                             PbrBundle {
@@ -349,12 +380,7 @@ pub fn edge_spawner(
                             RigidBody::Dynamic,
                             GravityScale(0.0),
                             Collider::capsule(source.position, target.position, 0.03),
-                            // ImpulseJoint::new(
-                            //     source_entity,
-                            //     SphericalJointBuilder::new()
-                            //         .local_anchor1(Vec3::ZERO)
-                            //         .local_anchor2(Vec3::ZERO),
-                            // ),
+                            // joint,
                         ))
                         .insert(CollisionGroups::new(Group::GROUP_14, Group::GROUP_5))
                         .insert(SolverGroups::new(Group::GROUP_8, Group::GROUP_18));
@@ -363,6 +389,30 @@ pub fn edge_spawner(
                 }
             } else {
                 // todo!("Implement UI element that states that source was not found.");
+            }
+        }
+    }
+}
+
+pub fn edge_destroyer(
+    mut commands: Commands,
+    mut napkin: ResMut<NapkinSettings>,
+    existing_edges: Query<(Entity, &mut EdgeController)>,
+) {
+    if let Some(selected_project) = &napkin.selected_project {
+        if !selected_project.is_empty() {
+            let filtered_edges = napkin
+                .edges
+                .iter()
+                .filter(|edge| edge.project == *selected_project)
+                .collect::<Vec<_>>();
+            for (entity, edge) in existing_edges.iter() {
+                if !filtered_edges
+                    .iter()
+                    .any(|&filtered_edge| filtered_edge.id == edge.id)
+                {
+                    commands.entity(entity).despawn();
+                }
             }
         }
     }

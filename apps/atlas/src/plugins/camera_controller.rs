@@ -6,7 +6,9 @@
 use bevy::input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, PrimaryWindow};
-use smooth_bevy_cameras::controllers::orbit::{OrbitCameraController, ControlEvent};
+use bevy_egui::egui::CursorIcon;
+use bevy_egui::EguiContexts;
+use smooth_bevy_cameras::controllers::orbit::{ControlEvent, OrbitCameraController};
 use std::{f32::consts::*, fmt};
 
 use crate::OccupiedScreenSpace;
@@ -175,8 +177,10 @@ pub fn run_camera_controller(
         ) {
             if (!*mouse_cursor_grab && !*toggle_cursor_grab)
                 && (mouse_position.x < occupied_screen_space.left + mouse_border_offset
-                    || mouse_position.x > (window_width - occupied_screen_space.right - mouse_border_offset)
-                    || mouse_position.y > (window_height - occupied_screen_space.bottom - mouse_border_offset)
+                    || mouse_position.x
+                        > (window_width - occupied_screen_space.right - mouse_border_offset)
+                    || mouse_position.y
+                        > (window_height - occupied_screen_space.bottom - mouse_border_offset)
                     || mouse_position.y < occupied_screen_space.top + mouse_border_offset)
             {
                 mouse_events.clear();
@@ -286,14 +290,17 @@ pub fn run_camera_controller(
 
 pub fn atlas_orbit_camera_input_map(
     mut events: EventWriter<ControlEvent>,
-    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
+    mut contexts: EguiContexts,
     mut mouse_wheel_reader: EventReader<MouseWheel>,
     mut mouse_motion_events: EventReader<MouseMotion>,
+    occupied_screen_space: Res<OccupiedScreenSpace>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     keyboard: Res<ButtonInput<KeyCode>>,
     controllers: Query<&OrbitCameraController>,
 ) {
-    let mut primary_window = windows.single_mut();
+    let ctx = contexts.ctx_mut();
+    let mut primary_window = primary_window.single_mut();
     // Can only control one camera at a time.
     let controller = if let Some(controller) = controllers.iter().find(|c| c.enabled) {
         controller
@@ -308,30 +315,56 @@ pub fn atlas_orbit_camera_input_map(
         ..
     } = *controller;
 
+    let mouse_border_offset = 5.0;
+    let cursor_inside = if let (Some(mouse_position), window_height, window_width) = (
+        primary_window.cursor_position(),
+        primary_window.height(),
+        primary_window.width(),
+    ) {
+        let render_window_left = occupied_screen_space.left + mouse_border_offset;
+        let render_window_right = window_width - occupied_screen_space.right - mouse_border_offset;
+        let render_window_bottom = window_height - occupied_screen_space.bottom - mouse_border_offset;
+        let render_window_top = occupied_screen_space.top + mouse_border_offset;
+
+        mouse_position.x >= render_window_left
+            && mouse_position.x <= render_window_right
+            && mouse_position.y <= render_window_bottom
+            && mouse_position.y >= render_window_top
+    } else {
+        false
+    };
+
+    if cursor_inside {
+        if ctx.output(|o| o.cursor_icon) == CursorIcon::Default {
+            ctx.output_mut(|o| o.cursor_icon = CursorIcon::Grab);
+        }
+    } else {
+        ctx.output_mut(|o| o.cursor_icon = CursorIcon::Default);
+    }
+
     let mut cursor_delta = Vec2::ZERO;
     for event in mouse_motion_events.read() {
         cursor_delta += event.delta;
     }
-    
+
     let mut cursor_grab = false;
-    if mouse_buttons.pressed(MouseButton::Right) {
+    if mouse_buttons.pressed(MouseButton::Right) && cursor_inside {
         events.send(ControlEvent::Orbit(mouse_rotate_sensitivity * cursor_delta));
         cursor_grab = true;
     }
 
+    let window_width = primary_window.width();
+    let window_height = primary_window.height();
+
     if cursor_grab {
         primary_window.cursor.grab_mode = CursorGrabMode::Locked;
         primary_window.cursor.visible = false;
+        primary_window
+            .set_cursor_position(Some(Vec2::new(window_width / 2.0, window_height / 2.0)));
     } else {
         primary_window.cursor.grab_mode = CursorGrabMode::None;
         primary_window.cursor.visible = true;
     }
-
-    // if mouse_buttons.pressed(MouseButton::Right) {
-    //     events.send(ControlEvent::TranslateTarget(
-    //         mouse_translate_sensitivity * cursor_delta,
-    //     ));
-    // }
 
     let mut scalar = 1.0;
     for event in mouse_wheel_reader.read() {

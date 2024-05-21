@@ -64,6 +64,7 @@ pub fn run_crosshair_controller(
 ) {
     let rotation_speed = 1.0; // Rotation speed in radians per second
     let movement_speed = 5.0; // Movement speed units per second
+    let mut set_default = false;
 
     if let Some(selected_id) = &napkin.napkin_crosshair.selected_id {
         if let Some(node) = nodes
@@ -80,13 +81,37 @@ pub fn run_crosshair_controller(
                     transform.translation +=
                         direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
                     for (mut camera_transform, mut look_transform) in camera.iter_mut() {
-                        camera_transform.translation += direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
-                        look_transform.eye += direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
-                        look_transform.target += direction.normalize() * dynamic_speed * time.delta_seconds().min(distance);
+                        camera_transform.translation += direction.normalize()
+                            * dynamic_speed
+                            * time.delta_seconds().min(distance);
+                        look_transform.eye += direction.normalize()
+                            * dynamic_speed
+                            * time.delta_seconds().min(distance);
+                        look_transform.target += direction.normalize()
+                            * dynamic_speed
+                            * time.delta_seconds().min(distance);
                     }
                 }
             }
+        } else {
+            set_default = true;
         }
+    } else {
+        set_default = true;
+    }
+
+    if (set_default) {
+        napkin.napkin_crosshair.selected_id = napkin
+            .nodes
+            .iter()
+            .filter(|node| {
+                napkin
+                    .selected_project
+                    .as_ref()
+                    .map_or(true, |selected_project| &node.project == selected_project)
+            })
+            .next()
+            .map(|node| node.id.clone());
     }
 
     for (mut transform, _) in crosshair_query.iter_mut() {

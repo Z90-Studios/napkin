@@ -23,7 +23,7 @@ pub struct AppState {
     long_about = None,
     before_help = "Project:\n███╗   ██╗ █████╗ ██████╗ ██╗  ██╗██╗███╗   ██╗\n████╗  ██║██╔══██╗██╔══██╗██║ ██╔╝██║████╗  ██║\n██╔██╗ ██║███████║██████╔╝█████╔╝ ██║██╔██╗ ██║\n██║╚██╗██║██╔══██║██╔═══╝ ██╔═██╗ ██║██║╚██╗██║\n██║ ╚████║██║  ██║██║     ██║  ██╗██║██║ ╚████║\n╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝\nA Z90 Studios Project.\n\nCheck out https://z90.studio for documentation and community links.")]
 struct Cli {
-    #[arg(short, long, default_value = "0.0.0.0")]
+    #[arg(short = 'H', long, default_value = "0.0.0.0")]
     host: String,
     #[arg(short, long, default_value = "28527")]
     port: String,

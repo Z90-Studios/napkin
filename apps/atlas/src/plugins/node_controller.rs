@@ -1,6 +1,6 @@
-use bevy::{prelude::*, window::PrimaryWindow};
+use bevy::{input::keyboard::KeyboardInput, prelude::*, window::{CursorGrabMode, PrimaryWindow}};
 use bevy_egui::{
-    egui::{self, Color32},
+    egui::{self, Color32, CursorIcon},
     EguiContexts,
 };
 use bevy_http_client::prelude::TypedResponse;
@@ -127,9 +127,9 @@ pub fn handle_node_physics(
                     (edge.source == nodes[i].1.id && edge.target == nodes[j].1.id) ||
                     (edge.target == nodes[i].1.id && edge.source == nodes[j].1.id)
                 );
-                let repulsion_factor = if connected { 0.8 } else { 1.0 };
+                let repulsion_factor = if connected { 0.3 } else { 0.6 };
                 if distance > 0.0 {
-                    let force_magnitude = repulsion_factor / distance.max(1.0); // Repulsive force inversely proportional to distance, adjusted by connection
+                    let force_magnitude = repulsion_factor / distance.max(0.6); // Repulsive force inversely proportional to distance, adjusted by connection
                     velocities[i] += direction.normalize() * force_magnitude * delta_time;
                 }
             }
@@ -167,11 +167,15 @@ pub fn handle_node_physics(
 pub fn handle_node_click(
     mut napkin: ResMut<NapkinSettings>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     existing_hover: Query<&NodeController, With<HoveredNode>>,
 ) {
     if let Ok(node) = existing_hover.get_single() {
         if mouse_button_input.just_pressed(MouseButton::Left) {
             let selected_nodes = napkin.selected_nodes.get_or_insert_with(Vec::new);
+            if !keyboard_input.pressed(KeyCode::ShiftLeft) && !keyboard_input.pressed(KeyCode::ShiftRight) {
+                selected_nodes.clear();
+            }
             selected_nodes.push(NapkinNode {
                 project: node.project.clone(),
                 id: node.id.clone(),
@@ -190,7 +194,9 @@ pub fn cast_ray(
     rapier_context: Res<RapierContext>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     existing_hover: Query<Entity, With<HoveredNode>>,
+    mut contexts: EguiContexts,
 ) {
+    let ctx = contexts.ctx_mut();
     let window = windows.single();
 
     let Some(cursor_position) = window.cursor_position() else {
@@ -202,6 +208,11 @@ pub fn cast_ray(
         let Some(ray) = camera.viewport_to_world(camera_transform, cursor_position) else {
             return;
         };
+        
+        // Don't register hits when rotating camera
+        if window.cursor.grab_mode == CursorGrabMode::Locked {
+            return;
+        }
 
         // Cast the ray
         let hit = rapier_context.cast_ray(
@@ -212,8 +223,10 @@ pub fn cast_ray(
             QueryFilter::new().groups(CollisionGroups::new(Group::ALL, Group::GROUP_13)),
         );
 
+
         if let Some((entity, _toi)) = hit {
             commands.entity(entity).insert(HoveredNode);
+            ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
         }
 
         for entity in existing_hover.iter() {
@@ -317,17 +330,24 @@ pub fn node_spawner(
                 .collect();
         }
     }
-    for node in filtered_nodes.iter() {
+    fn calculate_balanced_start_point(index: usize, total_nodes: usize) -> Vec3 {
+        let angle = 2.0 * std::f32::consts::PI * (index as f32) / (total_nodes as f32);
+        let radius = total_nodes as f32 * 0.3;
+        Vec3::new(
+            radius * angle.cos(),
+            0.5 * angle.sin() + 0.5,
+            radius * angle.sin(),
+        )
+    }
+
+    let total_nodes = filtered_nodes.len();
+    for (index, node) in filtered_nodes.iter().enumerate() {
         if existing_nodes
             .iter()
             .all(|existing_node| existing_node.id != node.id)
         {
             info!("Adding node of ID {}", node.id);
-            let start_point = Vec3::new(
-                rand::random::<f32>() * 5. - 5.,
-                rand::random::<f32>() * 1. - 0.5,
-                rand::random::<f32>() * 5. - 5.,
-            );
+            let start_point = calculate_balanced_start_point(index, total_nodes);
             let transform = Transform::from_translation(start_point);
             commands
                 .spawn((

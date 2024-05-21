@@ -1,3 +1,5 @@
+pub mod napkin_controller;
+pub mod debug_controller;
 pub mod camera_controller;
 pub mod crosshair_controller;
 pub mod project_controller;

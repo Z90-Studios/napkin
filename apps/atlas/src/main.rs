@@ -4,6 +4,7 @@ use bevy::{
     core_pipeline::bloom::BloomSettings,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
+    window::PrimaryWindow,
 };
 use bevy_egui::{
     egui::{self, Color32, RichText, Vec2, Vec2b},
@@ -24,8 +25,10 @@ mod plugins;
 use plugins::{
     camera_controller,
     crosshair_controller::CrosshairControllerPlugin,
+    debug_controller::DebugControllerPlugin,
     edge_controller::{self, EdgeControllerPlugin},
     edge_metadata_controller::EdgeMetadataControllerPlugin,
+    napkin_controller::NapkinPlugin,
     node_controller::{self, NodeControllerPlugin},
     node_metadata_controller::NodeMetadataControllerPlugin,
     project_controller::ProjectControllerPlugin,
@@ -149,7 +152,9 @@ impl Default for NapkinSettings {
 
 #[derive(Default, Resource)]
 struct AtlasDiagnostics {
-    fps_log: Vec<f64>,
+    fps_log: Vec<(f64, f64)>, // Tuple (uptime_at, fps)
+    uptime: f64,
+    debug_mode: bool,
 }
 
 fn main() {
@@ -168,12 +173,11 @@ fn main() {
             DefaultPlugins,
             EguiPlugin,
             HttpClientPlugin,
+            NapkinPlugin,
             RapierPhysicsPlugin::<NoUserData>::default(),
-            // RapierDebugRenderPlugin::default(),
             LookTransformPlugin,
             OrbitCameraPlugin::new(true),
             // CameraControllerPlugin,
-            // InfiniteGridPlugin,
             ProjectControllerPlugin,
             NodeControllerPlugin,
             EdgeControllerPlugin,
@@ -182,39 +186,63 @@ fn main() {
             CrosshairControllerPlugin,
             FrameTimeDiagnosticsPlugin::default(),
         ))
+        .add_plugins((DebugControllerPlugin,))
         .add_systems(Startup, (configure_visuals_system, setup_system))
         .add_systems(
             Update,
-            (
-                setup_ui,
-                camera_controller::atlas_orbit_camera_input_map,
-                edge_controller::cast_ray,
-                edge_controller::edge_spawner,
-            ),
+            (setup_ui, camera_controller::atlas_orbit_camera_input_map),
         )
         .run()
 }
 
 fn configure_visuals_system(mut contexts: EguiContexts) {
-    let atlas_visuals = egui::Visuals {
-        window_rounding: 0.0.into(),
-        window_fill: Color32::from_rgba_premultiplied(46, 64, 83, 40),
-        window_stroke: contexts
-            .ctx_mut()
-            .style()
-            .visuals
-            .widgets
-            .noninteractive
-            .fg_stroke,
-        ..Default::default()
-    };
+    let mut atlas_visuals = egui::Visuals::default();
+    atlas_visuals.window_rounding = 0.0.into();
+    atlas_visuals.window_fill = Color32::from_rgba_premultiplied(46, 64, 83, 40);
+    atlas_visuals.window_stroke = contexts
+        .ctx_mut()
+        .style()
+        .visuals
+        .widgets
+        .noninteractive
+        .fg_stroke;
+    atlas_visuals.widgets.noninteractive.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.widgets.inactive.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.widgets.active.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.widgets.hovered.bg_fill = Color32::TRANSPARENT;
     contexts.ctx_mut().set_visuals(atlas_visuals);
 }
 
+fn lerp_color(start: egui::Color32, end: egui::Color32, _t: f64) -> egui::Color32 {
+    let t = _t as f32;
+    let start_alpha = start.a() as f32 / 255.0;
+    let end_alpha = end.a() as f32 / 255.0;
+    let alpha = (1.0 - t) * start_alpha + t * end_alpha;
+    let alpha = alpha.clamp(0.0, 1.0) * 255.0;
+
+    let start_red = start.r() as f32 / 255.0;
+    let end_red = end.r() as f32 / 255.0;
+    let red = (1.0 - t) * start_red + t * end_red;
+    let red = (red.clamp(0.0, 1.0) * 255.0) as u8;
+
+    let start_green = start.g() as f32 / 255.0;
+    let end_green = end.g() as f32 / 255.0;
+    let green = (1.0 - t) * start_green + t * end_green;
+    let green = (green.clamp(0.0, 1.0) * 255.0) as u8;
+
+    let start_blue = start.b() as f32 / 255.0;
+    let end_blue = end.b() as f32 / 255.0;
+    let blue = (1.0 - t) * start_blue + t * end_blue;
+    let blue = (blue.clamp(0.0, 1.0) * 255.0) as u8;
+
+    egui::Color32::from_rgba_premultiplied(red, green, blue, alpha as u8)
+}
+
 fn setup_ui(
+    time: Res<Time>,
     mut atlas_diagnostics: ResMut<AtlasDiagnostics>,
     mut napkin: ResMut<NapkinSettings>,
-    windows: Query<&mut Window>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut contexts: EguiContexts,
     diagnostics: Res<DiagnosticsStore>,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
@@ -226,6 +254,8 @@ fn setup_ui(
     // mut egui_settings: ResMut<EguiSettings>,
 ) {
     let ctx = contexts.ctx_mut();
+    let primary_window = windows.single_mut();
+    atlas_diagnostics.uptime += time.delta_seconds_f64();
 
     let atlas_panel_frame = egui::Frame {
         fill: egui::Color32::from_black_alpha((255. * 0.9) as u8),
@@ -245,40 +275,51 @@ fn setup_ui(
             ui.with_layout(
                 egui::Layout::top_down_justified(egui::Align::Center),
                 |ui| {
-                    ui.label(egui::RichText::new(
-                        "TODO: Implement node/edge/metadata list, search, filter here",
-                    ));
+                    ui.heading("Napkin Atlas");
 
-                    if ui
-                        .add(egui::Button::new(egui::RichText::new("Refresh")).wrap(true))
-                        .clicked()
-                    {
-                        project_request.send(
-                            HttpClient::new()
-                                .get(format!("{}/project", napkin.server_url))
-                                .with_type::<Vec<NapkinProject>>(),
-                        );
-                        node_request.send(
-                            HttpClient::new()
-                                .get(format!("{}/node", napkin.server_url))
-                                .with_type::<Vec<NapkinNode>>(),
-                        );
-                        edge_request.send(
-                            HttpClient::new()
-                                .get(format!("{}/edge", napkin.server_url))
-                                .with_type::<Vec<NapkinEdge>>(),
-                        );
-                        node_metadata_request.send(
-                            HttpClient::new()
-                                .get(format!("{}/node/metadata", napkin.server_url))
-                                .with_type::<Vec<NapkinNodeMetadata>>(),
-                        );
-                        edge_metadata_request.send(
-                            HttpClient::new()
-                                .get(format!("{}/edge/metadata", napkin.server_url))
-                                .with_type::<Vec<NapkinEdgeMetadata>>(),
-                        );
-                    };
+                    ui.collapsing("Projects", |ui| {
+                        let mut selected_project =
+                            napkin.selected_project.clone().unwrap_or_default();
+                        let mut selected_nodes = napkin.selected_nodes.clone().unwrap_or_default();
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            for project in napkin.projects.iter() {
+                                if ui
+                                    .button(format!("Project: @{}/{}", project.scope, project.name))
+                                    .clicked()
+                                {
+                                    selected_project = project.id.clone();
+                                    selected_nodes = Vec::new();
+                                }
+                            }
+                        });
+                        if Some(&selected_project) != napkin.selected_project.as_ref() {
+                            napkin.selected_project = Some(selected_project.clone());
+                        }
+                    });
+
+                    ui.collapsing("Nodes", |ui| {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::TOP),
+                                    |ui| {
+                                        if ui.button("+").clicked() {}
+                                    },
+                                )
+                            });
+                            for node in napkin.nodes.iter() {
+                                if ui.button(format!("Node: {}", node.id)).clicked() {}
+                            }
+                        });
+                    });
+
+                    ui.collapsing("Edges", |ui| {
+                        egui::ScrollArea::vertical().show(ui, |ui| {
+                            for node in napkin.nodes.iter() {
+                                if ui.button(format!("Edge: {}", node.id)).clicked() {}
+                            }
+                        });
+                    });
                 },
             );
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
@@ -286,79 +327,106 @@ fn setup_ui(
         .response
         .rect
         .width();
-    occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
-        .resizable(true)
-        .frame(atlas_panel_frame)
-        .show(ctx, |ui| {
-            ui.group(|ui| {
-                ui.label(
-                    if let Some(project) = &napkin
+    occupied_screen_space.top =
+        egui::TopBottomPanel::top("top_panel")
+            .resizable(true)
+            .frame(atlas_panel_frame)
+            .show(ctx, |ui| {
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            if let Some(project) = &napkin.projects.iter().find(|&project| {
+                                Some(&project.id) == napkin.selected_project.as_ref()
+                            }) {
+                                format!("Current Project: @{}/{}", &project.scope, &project.name)
+                            } else {
+                                "Current Project: None".to_string()
+                            },
+                        )
+                        .highlight();
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            if ui.small_button("X").clicked() {
+                                napkin.selected_project = None;
+                            }
+                        });
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Search:");
+                        ui.text_edit_singleline(&mut napkin.project_search_string);
+                    });
+                    let project_search_string = napkin.project_search_string.clone();
+                    let filtered_projects = napkin
                         .projects
                         .iter()
-                        .find(|&project| Some(&project.id) == napkin.selected_project.as_ref())
-                    {
-                        format!("Current Project: @{}/{}", &project.scope, &project.name)
-                    } else {
-                        "Current Project: None".to_string()
-                    },
-                );
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("Search:");
-                    ui.text_edit_singleline(&mut napkin.project_search_string);
-                });
-                let project_search_string = napkin.project_search_string.clone();
-                let filtered_projects = napkin
-                    .projects
-                    .iter()
-                    .filter(|project| {
-                        format!("@{}/{}", project.scope, project.name)
-                            .contains(&project_search_string)
-                    })
-                    .cloned() // Clone the filtered projects to avoid borrowing issue
-                    .collect::<Vec<_>>();
-                egui::ScrollArea::horizontal().show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        for project in filtered_projects {
-                            if ui
-                                .button(RichText::new(format!(
-                                    "@{}/{}",
-                                    project.scope, project.name
-                                )))
-                                .clicked()
-                            {
-                                napkin.selected_project = Some(project.id.clone());
+                        .filter(|project| {
+                            format!("@{}/{}", project.scope, project.name)
+                                .contains(&project_search_string)
+                        })
+                        .cloned() // Clone the filtered projects to avoid borrowing issue
+                        .collect::<Vec<_>>();
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            for project in filtered_projects {
+                                if ui
+                                    .button(RichText::new(format!(
+                                        "@{}/{}",
+                                        project.scope, project.name
+                                    )))
+                                    .clicked()
+                                {
+                                    napkin.selected_project = Some(project.id.clone());
+                                }
                             }
-                            // ui.label(format!("@{}/{}", project.scope, project.name));
-                        }
-                    })
+                        })
+                    });
                 });
-            });
-        })
-        .response
-        .rect
-        .height();
+            })
+            .response
+            .rect
+            .height();
     occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
         .resizable(true)
         .frame(atlas_panel_frame)
         .show(ctx, |ui| {
-            ui.label(egui::RichText::new(
-                "TODO: Implement node/edge/metadata viewer/editor here",
-            ));
-            if let Some(hovered_nodes) = &napkin.hovered_nodes {
-                for node in hovered_nodes {
-                    ui.label(egui::RichText::new(node.to_string()));
+            ui.group(|ui| {
+                ui.label("Node/Edge/Metadata Viewer/Editor");
+                ui.separator();
+                if let Some(selected_nodes) = &napkin.selected_nodes {
+                    for node in selected_nodes {
+                        ui.horizontal(|ui| {
+                            let node_title = napkin
+                                .node_metadata
+                                .iter()
+                                .find(|metadata| metadata.owner_id == node.id)
+                                .map_or(node.id.clone(), |metadata| {
+                                    metadata.value["text"].as_str().unwrap_or("").to_string()
+                                });
+                            let project = napkin
+                                .projects
+                                .iter()
+                                .find(|p| p.id == node.project)
+                                .unwrap();
+                            let project_display = format!("@{}/{}", project.scope, project.name);
+                            ui.label(format!("Node ID: {}", node_title));
+                            ui.label(format!("Project: {}", project_display));
+                        });
+                    }
                 }
-            }
-            if let Some(hovered_edges) = &napkin.hovered_edges {
-                for edge in hovered_edges {
-                    ui.label(egui::RichText::new(edge.to_string()));
+                if let Some(selected_edges) = &napkin.selected_edges {
+                    for edge_id in selected_edges {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("Edge ID: {}", edge_id));
+                            // Placeholder for edge details
+                        });
+                    }
                 }
-            }
-            if let Some(selected_nodes) = &napkin.selected_nodes {
-                for node in selected_nodes {
-                    ui.label(egui::RichText::new(format!("Node selected! ({})", node.id)));
+                if let Some(node_metadata) = napkin.node_metadata.first() {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Metadata Name: {}", node_metadata.name));
+                        ui.label(format!("Metadata Value: {}", node_metadata.value));
+                    });
                 }
-            }
+            });
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
@@ -368,100 +436,126 @@ fn setup_ui(
         .resizable(true)
         .frame(atlas_panel_frame)
         .show(ctx, |ui| {
-            // ui.horizontal(|ui| {
-            //     ui.label(egui::RichText::new("Connection Status:").strong());
-            //     if napkin.is_connected {
-            //         ui.colored_label(egui::Color32::GREEN, "Connected");
-            //     } else {
-            //         ui.colored_label(egui::Color32::RED, "Disconnected");
-            //     }
-            // });
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
                 ui.vertical(|ui| {
-                    // FPS Graph
                     let mut fps_data = Vec::new();
-                    for (index, value) in atlas_diagnostics.fps_log.iter().enumerate() {
-                        fps_data.push([index as f64 * 0.01, *value as f64]);
+                    for (uptime_at, value) in atlas_diagnostics.fps_log.iter() {
+                        fps_data.push([*uptime_at, *value as f64]);
                     }
-                    let fps_line = Line::new(fps_data).color({
-                        if let Some(last_fps) = atlas_diagnostics.fps_log.last() {
-                            if *last_fps > (60. * 0.9) {
-                                egui::Color32::GREEN
-                            } else if *last_fps > (60. * 0.7) {
-                                egui::Color32::YELLOW
+                    let line = Line::new(fps_data);
+                    let line_color =
+                        if let Some((_last_uptime, last_fps)) = atlas_diagnostics.fps_log.last() {
+                            // Replace the lerp calls in your code with:
+                            let color_blend = if *last_fps > 60.0 * 0.9 {
+                                lerp_color(
+                                    egui::Color32::GREEN,
+                                    egui::Color32::YELLOW,
+                                    (60.0 - *last_fps) / (60.0 * 0.2),
+                                )
+                            } else if *last_fps > 60.0 * 0.7 {
+                                lerp_color(
+                                    egui::Color32::YELLOW,
+                                    egui::Color32::RED,
+                                    (60.0 * 0.9 - *last_fps) / (60.0 * 0.2),
+                                )
                             } else {
                                 egui::Color32::RED
-                            }
+                            };
+                            color_blend
                         } else {
                             egui::Color32::GRAY // Default color if no fps data is available
-                        }
-                    });
-
-                    // RAM Utilization Graph
-                    let mut ram_data = Vec::new();
-                    for (index, value) in atlas_diagnostics.ram_log.iter().enumerate() {
-                        ram_data.push([index as f64 * 0.01, *value as f64]);
-                    }
-                    let ram_line = Line::new(ram_data).color({
-                        if let Some(last_ram) = atlas_diagnostics.ram_log.last() {
-                            if *last_ram < 80.0 {
-                                egui::Color32::GREEN
-                            } else if *last_ram < 90.0 {
-                                egui::Color32::YELLOW
-                            } else {
-                                egui::Color32::RED
-                            }
-                        } else {
-                            egui::Color32::GRAY // Default color if no ram data is available
-                        }
-                    });
-
-                    // Display FPS and RAM values
+                        };
+                    let line = line.color(line_color);
                     ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if let Some(fps_value) = diagnostics
+                            ui.label(egui::RichText::new(format!(
+                                "{:.3}",
+                                &atlas_diagnostics.uptime
+                            )));
+                            ui.label(egui::RichText::new("Uptime (sec):").strong());
+                            if let Some(value) = diagnostics
                                 .get(&FrameTimeDiagnosticsPlugin::FPS)
                                 .and_then(|fps| fps.smoothed())
                             {
-                                atlas_diagnostics.fps_log.push(fps_value);
-                                ui.label(format!("{:.2} FPS", fps_value));
+                                let uptime = atlas_diagnostics.uptime;
+                                atlas_diagnostics.fps_log.push((uptime, value));
+                                if atlas_diagnostics.fps_log.len() > 500 {
+                                    atlas_diagnostics.fps_log.drain(0..1); // Clear out the oldest entries
+                                }
+                                ui.label(format!("{:.2}", value));
                             } else {
-                                ui.label("FPS: N/A");
+                                ui.label("N/A");
                             }
-
-                            if let Some(ram_value) = diagnostics
-                                .get(&FrameTimeDiagnosticsPlugin::RAM)
-                                .and_then(|ram| ram.smoothed())
-                            {
-                                atlas_diagnostics.ram_log.push(ram_value);
-                                ui.label(format!("{:.2} MB", ram_value));
-                            } else {
-                                ui.label("RAM: N/A");
-                            }
+                            ui.label(egui::RichText::new("FPS:").strong());
                         });
                     });
-
-                    // Plotting both FPS and RAM utilization
-                    Plot::new("performance_plot")
+                    Plot::new("my_plot")
                         .view_aspect(3.0)
-                        .show_axes(Vec2b { x: false, y: true })
-                        .show_x(false)
+                        .show_axes(Vec2b { x: false, y: false })
                         .label_formatter(|name, value| {
-                            format!("{}: {:.2}", name, value.y)
+                            if !name.is_empty() {
+                                format!("{}: {:.*}%", name, 1, value.y)
+                            } else {
+                                format!("Uptime {:.3}\n{:.2} FPS", value.x, value.y)
+                            }
                         })
-                        .show(ui, |plot_ui| {
-                            plot_ui.line(fps_line);
-                            plot_ui.line(ram_line);
-                        });
+                        .show(ui, |plot_ui| plot_ui.line(line));
+
+                    ui.horizontal(|ui| {
+                        ui.with_layout(
+                            egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                            |ui| {
+                                ui.checkbox(&mut atlas_diagnostics.debug_mode, "Debug Mode");
+                            },
+                        );
+                    });
 
                     ui.allocate_space(ui.available_size());
                 });
             });
-        });
-    })
+        })
         .response
         .rect
         .width();
+
+    let toolbar_frame = egui::Frame {
+        fill: egui::Color32::from_black_alpha((255. * 0.99) as u8),
+        stroke: egui::Stroke::NONE,
+        ..egui::Frame::none()
+    };
+
+    let window_width = primary_window.width();
+    egui::Window::new("Add New")
+        .frame(toolbar_frame)
+        .id(egui::Id::new("toolbar"))
+        .resizable(false)
+        .movable(false)
+        .title_bar(false)
+        .fixed_pos(egui::pos2(
+            window_width - occupied_screen_space.right,
+            occupied_screen_space.top,
+        ))
+        .show(ctx, |ui| {
+            ui.vertical(|ui| {
+                ui.add(
+                    egui::Button::new(egui::RichText::new("New Node").size(24.))
+                        .frame(false)
+                        .stroke(egui::Stroke::NONE)
+                        .fill(Color32::TRANSPARENT),
+                );
+                ui.add(
+                    egui::Button::new(egui::RichText::new("New Edge").size(24.))
+                        .frame(false)
+                        .stroke(egui::Stroke::NONE)
+                        .fill(Color32::TRANSPARENT),
+                );
+            });
+            // ui.menu_button(egui::RichText::new("+").heading(), |ui| {
+            //     if ui.button("Node").clicked() {}
+            //     if ui.button("Edge").clicked() {}
+            //     if ui.button("Metadata").clicked() {}
+            // });
+        });
 }
 
 fn setup_system(mut commands: Commands) {
@@ -491,13 +585,4 @@ fn setup_system(mut commands: Commands) {
             Vec3::new(0., 0., 0.),
             Vec3::Y,
         ));
-    commands.spawn(InfiniteGridBundle {
-        settings: InfiniteGridSettings {
-            x_axis_color: Color::rgb(0.8, 0.8, 0.8),
-            z_axis_color: Color::rgb(0., 1., 0.),
-            scale: 10.,
-            ..Default::default()
-        },
-        ..Default::default()
-    });
 }
