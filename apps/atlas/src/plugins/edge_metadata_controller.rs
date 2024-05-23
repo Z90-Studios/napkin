@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use bevy_http_client::prelude::TypedResponse;
-use std::fmt;
 
 use crate::{NapkinEdgeMetadata, NapkinSettings};
 

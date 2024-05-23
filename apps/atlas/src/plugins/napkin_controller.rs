@@ -13,13 +13,9 @@ impl Plugin for NapkinPlugin {
 }
 
 #[derive(Component)]
+#[derive(Default)]
 pub struct Napkin {}
 
-impl Default for Napkin {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl fmt::Display for Napkin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -28,8 +24,8 @@ impl fmt::Display for Napkin {
 }
 
 fn run_napkin_controller(
-    mut atlas_diagnostics: ResMut<AtlasDiagnostics>,
-    mut napkin: ResMut<NapkinSettings>,
+    atlas_diagnostics: ResMut<AtlasDiagnostics>,
+    napkin: ResMut<NapkinSettings>,
     mut project_request: EventWriter<
         bevy_http_client::prelude::TypedRequest<Vec<crate::NapkinProject>>,
     >,

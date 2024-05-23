@@ -1,8 +1,8 @@
-use bevy::{prelude::*, render::mesh::shape::Icosphere};
-use smooth_bevy_cameras::{controllers::orbit::OrbitCameraController, LookTransform};
+use bevy::prelude::*;
+use smooth_bevy_cameras::LookTransform;
 use std::fmt;
 
-use crate::{NapkinCrosshair, NapkinCrosshairSelectionTypes, NapkinSettings};
+use crate::NapkinSettings;
 
 use super::node_controller::NodeController;
 
@@ -16,13 +16,9 @@ impl Plugin for CrosshairControllerPlugin {
 }
 
 #[derive(Component)]
+#[derive(Default)]
 pub struct CrosshairController {}
 
-impl Default for CrosshairController {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl fmt::Display for CrosshairController {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -33,13 +29,13 @@ impl fmt::Display for CrosshairController {
 pub fn spawn_crosshair(
     mut commands: Commands,
     ass: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    _meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut napkin: ResMut<NapkinSettings>,
+    _napkin: ResMut<NapkinSettings>,
 ) {
     let crosshair_gltf = ass.load("crosshair.glb#Scene0");
 
-    let material = materials.add(StandardMaterial {
+    let _material = materials.add(StandardMaterial {
         base_color: Color::rgb(0.8, 0.1, 0.1),
         ..Default::default()
     });
@@ -100,7 +96,7 @@ pub fn run_crosshair_controller(
         set_default = true;
     }
 
-    if (set_default) {
+    if set_default {
         napkin.napkin_crosshair.selected_id = napkin
             .nodes
             .iter()

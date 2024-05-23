@@ -232,25 +232,23 @@ pub fn run_camera_controller(
             transform.translation += controller.velocity.x * dt * right
                 + controller.velocity.y * dt * Vec3::Y
                 + controller.velocity.z * dt * forward;
-        } else {
-            if *mouse_cursor_orbit {
-                for mouse_event in mouse_events.read() {
-                    controller.yaw -=
-                        mouse_event.delta.x * RADIANS_PER_DOT * controller.sensitivity;
-                    controller.pitch = (controller.pitch
-                        - mouse_event.delta.y * RADIANS_PER_DOT * controller.sensitivity)
-                        .clamp(-PI / 2., PI / 2.);
-                }
-                // Calculate the position relative to the origin
-                let distance_from_origin = transform.translation.length();
-                let orbit_position = Vec3::new(
-                    distance_from_origin * controller.yaw.cos() * controller.pitch.cos(),
-                    distance_from_origin * controller.pitch.sin(),
-                    distance_from_origin * controller.yaw.sin() * controller.pitch.cos(),
-                );
-                // Apply the orbit position to the camera's translation
-                transform.translation = orbit_position;
+        } else if *mouse_cursor_orbit {
+            for mouse_event in mouse_events.read() {
+                controller.yaw -=
+                    mouse_event.delta.x * RADIANS_PER_DOT * controller.sensitivity;
+                controller.pitch = (controller.pitch
+                    - mouse_event.delta.y * RADIANS_PER_DOT * controller.sensitivity)
+                    .clamp(-PI / 2., PI / 2.);
             }
+            // Calculate the position relative to the origin
+            let distance_from_origin = transform.translation.length();
+            let orbit_position = Vec3::new(
+                distance_from_origin * controller.yaw.cos() * controller.pitch.cos(),
+                distance_from_origin * controller.pitch.sin(),
+                distance_from_origin * controller.yaw.sin() * controller.pitch.cos(),
+            );
+            // Apply the orbit position to the camera's translation
+            transform.translation = orbit_position;
         }
 
         // Handle cursor grab
@@ -296,7 +294,7 @@ pub fn atlas_orbit_camera_input_map(
     mut mouse_motion_events: EventReader<MouseMotion>,
     occupied_screen_space: Res<OccupiedScreenSpace>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    keyboard: Res<ButtonInput<KeyCode>>,
+    // keyboard: Res<ButtonInput<KeyCode>>,
     controllers: Query<&OrbitCameraController>,
 ) {
     let ctx = contexts.ctx_mut();
@@ -309,7 +307,7 @@ pub fn atlas_orbit_camera_input_map(
     };
     let OrbitCameraController {
         mouse_rotate_sensitivity,
-        mouse_translate_sensitivity,
+        
         mouse_wheel_zoom_sensitivity,
         pixels_per_line,
         ..

@@ -62,7 +62,7 @@ fn handle_debug_state(
       }
   } else {
       rapier_debug_context.enabled = false;
-      for mut entity in debug_query.iter_mut() {
+      for entity in debug_query.iter_mut() {
           commands.entity(entity).despawn();
       }
   }

@@ -7,13 +7,12 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bevy_egui::{
-    egui::{self, Color32, RichText, Vec2, Vec2b},
-    EguiContexts, EguiPlugin, EguiSettings,
+    egui::{self, Color32, RichText, Vec2b},
+    EguiContexts, EguiPlugin
 };
 use bevy_http_client::prelude::*;
-use bevy_infinite_grid::{InfiniteGridBundle, InfiniteGridPlugin, InfiniteGridSettings};
 use bevy_rapier3d::prelude::*;
-use egui_plot::{Line, Plot, PlotPoints};
+use egui_plot::{Line, Plot};
 use serde::{Deserialize, Serialize};
 use smooth_bevy_cameras::{
     controllers::orbit::{OrbitCameraBundle, OrbitCameraController, OrbitCameraPlugin},
@@ -26,10 +25,10 @@ use plugins::{
     camera_controller,
     crosshair_controller::CrosshairControllerPlugin,
     debug_controller::DebugControllerPlugin,
-    edge_controller::{self, EdgeControllerPlugin},
+    edge_controller::EdgeControllerPlugin,
     edge_metadata_controller::EdgeMetadataControllerPlugin,
     napkin_controller::NapkinPlugin,
-    node_controller::{self, NodeControllerPlugin},
+    node_controller::NodeControllerPlugin,
     node_metadata_controller::NodeMetadataControllerPlugin,
     project_controller::ProjectControllerPlugin,
 };
@@ -43,15 +42,7 @@ struct OccupiedScreenSpace {
 }
 
 #[derive(Default)]
-enum NapkinCrosshairSelectionTypes {
-    #[default]
-    Node,
-    Edge,
-}
-
-#[derive(Default)]
 struct NapkinCrosshair {
-    selected_type: NapkinCrosshairSelectionTypes,
     selected_id: Option<String>,
 }
 
@@ -184,7 +175,7 @@ fn main() {
             NodeMetadataControllerPlugin,
             EdgeMetadataControllerPlugin,
             CrosshairControllerPlugin,
-            FrameTimeDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin,
         ))
         .add_plugins((DebugControllerPlugin,))
         .add_systems(Startup, (configure_visuals_system, setup_system))
@@ -241,12 +232,6 @@ fn setup_ui(
     mut contexts: EguiContexts,
     diagnostics: Res<DiagnosticsStore>,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
-    mut project_request: EventWriter<TypedRequest<Vec<NapkinProject>>>,
-    mut node_request: EventWriter<TypedRequest<Vec<NapkinNode>>>,
-    mut edge_request: EventWriter<TypedRequest<Vec<NapkinEdge>>>,
-    mut node_metadata_request: EventWriter<TypedRequest<Vec<NapkinNodeMetadata>>>,
-    mut edge_metadata_request: EventWriter<TypedRequest<Vec<NapkinEdgeMetadata>>>,
-    // mut egui_settings: ResMut<EguiSettings>,
 ) {
     let ctx = contexts.ctx_mut();
     let primary_window = windows.single_mut();
@@ -312,7 +297,7 @@ fn setup_ui(
                         }
                     });
                 });
-                ui.menu_button("Edit", |ui| {
+                ui.menu_button("Edit", |_ui| {
                     // Placeholder for future edit options
                 });
 
@@ -497,13 +482,14 @@ fn setup_ui(
                 ui.vertical(|ui| {
                     let mut fps_data = Vec::new();
                     for (uptime_at, value) in atlas_diagnostics.fps_log.iter() {
-                        fps_data.push([*uptime_at, *value as f64]);
+                        fps_data.push([*uptime_at, { *value }]);
                     }
                     let line = Line::new(fps_data);
                     let line_color =
                         if let Some((_last_uptime, last_fps)) = atlas_diagnostics.fps_log.last() {
                             // Replace the lerp calls in your code with:
-                            let color_blend = if *last_fps > 60.0 * 0.9 {
+                            
+                            if *last_fps > 60.0 * 0.9 {
                                 lerp_color(
                                     egui::Color32::GREEN,
                                     egui::Color32::YELLOW,
@@ -517,8 +503,7 @@ fn setup_ui(
                                 )
                             } else {
                                 egui::Color32::RED
-                            };
-                            color_blend
+                            }
                         } else {
                             egui::Color32::GRAY // Default color if no fps data is available
                         };

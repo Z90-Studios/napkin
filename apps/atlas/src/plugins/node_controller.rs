@@ -1,14 +1,14 @@
-use bevy::{input::keyboard::KeyboardInput, prelude::*, window::{CursorGrabMode, PrimaryWindow}};
+use bevy::{prelude::*, window::{CursorGrabMode, PrimaryWindow}};
 use bevy_egui::{
     egui::{self, Color32, CursorIcon},
     EguiContexts,
 };
 use bevy_http_client::prelude::TypedResponse;
 use bevy_rapier3d::{
-    dynamics::{GravityScale, RapierRigidBodyHandle, RigidBody},
+    dynamics::{GravityScale, RigidBody},
     geometry::{Collider, CollisionGroups, Group, SolverGroups},
     pipeline::QueryFilter,
-    plugin::RapierContext, rapier::geometry::InteractionGroups,
+    plugin::RapierContext,
 };
 use std::fmt;
 
@@ -38,7 +38,6 @@ pub struct HoveredNode;
 
 #[derive(Component)]
 pub struct NodeController {
-    pub visible: bool,
     pub project: String,
     pub id: String,
     pub position: Vec3,
@@ -47,7 +46,6 @@ pub struct NodeController {
 impl Default for NodeController {
     fn default() -> Self {
         Self {
-            visible: true,
             project: "Unknown".to_string(),
             id: "1234".to_string(),
             position: Vec3::ZERO,
@@ -67,7 +65,7 @@ impl fmt::Display for NodeController {
 
 pub fn run_node_controller(
     mut napkin: ResMut<NapkinSettings>,
-    time: Res<Time>,
+    _time: Res<Time>,
     mut node_set: ParamSet<(
         Query<(&GlobalTransform, &mut Transform, &mut NodeController), Without<Camera>>,
         Query<(&mut HoveredNode, &NodeController), Without<Camera>>,
@@ -92,7 +90,7 @@ pub fn run_node_controller(
     napkin.hovered_nodes = Some(new_selected_nodes);
 }
 
-pub fn handle_node_physics(
+pub fn _handle_node_physics(
     mut query: Query<(&mut Transform, &NodeController)>,
     time: Res<Time>,
     napkin: Res<NapkinSettings>,
@@ -181,7 +179,6 @@ pub fn handle_node_click(
                 id: node.id.clone(),
             });
             napkin.napkin_crosshair = crate::NapkinCrosshair {
-                selected_type: crate::NapkinCrosshairSelectionTypes::Node,
                 selected_id: Some(node.id.clone()),
             };
         }
@@ -242,7 +239,7 @@ pub fn cast_ray(
 }
 
 pub fn node_tooltip(
-    mut napkin: ResMut<NapkinSettings>,
+    napkin: ResMut<NapkinSettings>,
     windows: Query<&mut Window>,
     mut contexts: EguiContexts,
 ) {
@@ -295,7 +292,7 @@ pub fn node_tooltip(
                                     .show(ui, |ui| {
                                         ui.style_mut().wrap = Some(false);
                                         ui.label(
-                                            egui::RichText::new(format!("{}", metadata.name))
+                                            egui::RichText::new(metadata.name.to_string())
                                                 .color(metadata_color),
                                         );
                                     });
@@ -323,11 +320,7 @@ pub fn node_spawner(
     let mut filtered_nodes: Vec<&NapkinNode> = napkin.nodes.iter().collect();
     if let Some(selected_project) = &napkin.selected_project {
         if !selected_project.is_empty() {
-            filtered_nodes = filtered_nodes
-                .iter()
-                .filter(|&&node| node.project == *selected_project)
-                .cloned()
-                .collect();
+            filtered_nodes.retain(|&node| node.project == *selected_project);
         }
     }
     fn calculate_balanced_start_point(index: usize, total_nodes: usize) -> Vec3 {
@@ -381,7 +374,7 @@ pub fn node_spawner(
 
 pub fn node_destroyer(
     mut commands: Commands,
-    mut napkin: ResMut<NapkinSettings>,
+    napkin: ResMut<NapkinSettings>,
     existing_nodes: Query<(Entity, &mut NodeController)>,
 ) {
     if let Some(selected_project) = &napkin.selected_project {

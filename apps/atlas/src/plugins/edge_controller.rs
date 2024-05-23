@@ -9,7 +9,7 @@ use bevy_egui::{
 use bevy_http_client::prelude::TypedResponse;
 use bevy_rapier3d::{
     dynamics::{
-        FixedJoint, GravityScale, ImpulseJoint, RapierRigidBodyHandle, RigidBody, RopeJointBuilder, SphericalJoint, SphericalJointBuilder
+        GravityScale, ImpulseJoint, RapierRigidBodyHandle, RigidBody, RopeJointBuilder
     },
     geometry::{Collider, CollisionGroups, Group, SolverGroups},
     pipeline::QueryFilter,
@@ -17,7 +17,7 @@ use bevy_rapier3d::{
 };
 use std::fmt;
 
-use crate::{NapkinEdge, NapkinNode, NapkinSettings};
+use crate::{NapkinEdge, NapkinSettings};
 
 use super::node_controller::NodeController;
 
@@ -40,23 +40,19 @@ pub struct HoveredEdge;
 
 #[derive(Component)]
 pub struct EdgeController {
-    pub visible: bool,
     pub project: String,
     pub id: String,
     pub source: String,
     pub target: String,
-    pub position: Vec3,
 }
 
 impl Default for EdgeController {
     fn default() -> Self {
         Self {
-            visible: true,
             project: "Unknown".to_string(),
             id: "1234".to_string(),
             source: "1234".to_string(),
             target: "1234".to_string(),
-            position: Vec3::ZERO,
         }
     }
 }
@@ -73,7 +69,7 @@ impl fmt::Display for EdgeController {
 
 pub fn run_edge_controller(
     mut napkin: ResMut<NapkinSettings>,
-    mut data_set: ParamSet<(
+    _data_set: ParamSet<(
         Query<
             (
                 &GlobalTransform,
@@ -88,13 +84,13 @@ pub fn run_edge_controller(
     mut selected_edges: Query<(&mut HoveredEdge, &EdgeController), Without<Camera>>,
     // camera: Query<&Transform, With<Camera>>,
 ) {
-    let nodes: Vec<(Vec3, String)> = data_set
-        .p0()
-        .iter()
-        .map(|(global_transform, _, node_controller, _)| {
-            (global_transform.translation(), node_controller.id.clone())
-        })
-        .collect();
+    // let nodes: Vec<(Vec3, String)> = data_set
+    //     .p0()
+    //     .iter()
+    //     .map(|(global_transform, _, node_controller, _)| {
+    //         (global_transform.translation(), node_controller.id.clone())
+    //     })
+    //     .collect();
     // for (mut edge_pos, edge_controller) in data_set.p1().iter_mut() {
     //     let source_node_id = edge_controller.source.clone();
     //     let target_node_id = edge_controller.target.clone();
@@ -173,7 +169,7 @@ pub fn cast_ray(
 
         
 
-        if let None = node_hit {
+        if node_hit.is_none() {
             if let Some((entity, _toi)) = hit {
                 commands.entity(entity).insert(HoveredEdge);
                 ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
@@ -237,7 +233,7 @@ fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
 }
 
 pub fn edge_tooltip(
-    mut napkin: ResMut<NapkinSettings>,
+    napkin: ResMut<NapkinSettings>,
     windows: Query<&mut Window>,
     mut contexts: EguiContexts,
 ) {
@@ -291,7 +287,7 @@ pub fn edge_tooltip(
                                     .show(ui, |ui| {
                                         ui.style_mut().wrap = Some(false);
                                         ui.label(
-                                            egui::RichText::new(format!("{}", metadata.name))
+                                            egui::RichText::new(metadata.name.to_string())
                                                 .color(metadata_color),
                                         );
                                     });
@@ -334,7 +330,7 @@ pub fn edge_spawner(
                 }
             }
             if let Some((source_entity, source)) = source_node {
-                if let Some((target_entity, target)) = target_node {
+                if let Some((_target_entity, target)) = target_node {
                     let direction = (target.position - source.position).normalize();
                     let line_length = (source.position - target.position).length();
                     let line_transform =
@@ -360,7 +356,7 @@ pub fn edge_spawner(
                     let rope = RopeJointBuilder::new(2.0)
                         .local_anchor1(Vec3::new(0.0, line_length / 2., 0.0))
                         .local_anchor2(Vec3::new(0.0, -line_length / 2., 0.0));
-                    let joint = ImpulseJoint::new(source_entity, rope);
+                    let _joint = ImpulseJoint::new(source_entity, rope);
 
                     commands
                         .spawn((
@@ -374,7 +370,6 @@ pub fn edge_spawner(
                                 id: edge.id.clone(),
                                 source: edge.source.clone(),
                                 target: edge.target.clone(),
-                                position: line_transform.translation,
                                 ..Default::default()
                             },
                             RigidBody::Dynamic,
@@ -396,7 +391,7 @@ pub fn edge_spawner(
 
 pub fn edge_destroyer(
     mut commands: Commands,
-    mut napkin: ResMut<NapkinSettings>,
+    napkin: ResMut<NapkinSettings>,
     existing_edges: Query<(Entity, &mut EdgeController)>,
 ) {
     if let Some(selected_project) = &napkin.selected_project {
