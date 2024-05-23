@@ -336,7 +336,7 @@ pub fn atlas_orbit_camera_input_map(
 
     if cursor_inside {
         if ctx.output(|o| o.cursor_icon) == CursorIcon::Default {
-            ctx.output_mut(|o| o.cursor_icon = CursorIcon::Grab);
+            // ctx.output_mut(|o| o.cursor_icon = CursorIcon::Grab);
         }
     } else {
         ctx.output_mut(|o| o.cursor_icon = CursorIcon::Default);

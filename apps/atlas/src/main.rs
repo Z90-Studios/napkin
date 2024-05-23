@@ -198,18 +198,13 @@ fn main() {
 fn configure_visuals_system(mut contexts: EguiContexts) {
     let mut atlas_visuals = egui::Visuals::default();
     atlas_visuals.window_rounding = 0.0.into();
-    atlas_visuals.window_fill = Color32::from_rgba_premultiplied(46, 64, 83, 40);
-    atlas_visuals.window_stroke = contexts
-        .ctx_mut()
-        .style()
-        .visuals
-        .widgets
-        .noninteractive
-        .fg_stroke;
+    atlas_visuals.window_fill = egui::Color32::from_black_alpha((255. * 0.9) as u8);
+    atlas_visuals.window_stroke = egui::Stroke::new(0.2, egui::Color32::from_white_alpha(255));
     atlas_visuals.widgets.noninteractive.bg_fill = Color32::TRANSPARENT;
     atlas_visuals.widgets.inactive.bg_fill = Color32::TRANSPARENT;
     atlas_visuals.widgets.active.bg_fill = Color32::TRANSPARENT;
     atlas_visuals.widgets.hovered.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.menu_rounding = 0.0.into();
     contexts.ctx_mut().set_visuals(atlas_visuals);
 }
 
@@ -267,6 +262,126 @@ fn setup_ui(
         },
         ..egui::Frame::none()
     };
+    let atlas_window_frame = egui::Frame {
+        fill: egui::Color32::from_black_alpha((255. * 0.9) as u8),
+        inner_margin: egui::Margin {
+            left: 4.,
+            right: 4.,
+            top: 4.,
+            bottom: 4.,
+        },
+        stroke: egui::Stroke::new(0.2, Color32::from_white_alpha(255)),
+        ..egui::Frame::none()
+    };
+
+    occupied_screen_space.bottom = egui::TopBottomPanel::bottom("footer_panel")
+        .resizable(false)
+        .frame(atlas_panel_frame)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.label(format!("Projects: {}", napkin.projects.len()));
+                    ui.label(format!("Nodes: {}", napkin.nodes.len()));
+                    ui.label(format!("Edges: {}", napkin.edges.len()));
+                    ui.label(format!("Node Metadata: {}", napkin.node_metadata.len()));
+                    ui.label(format!("Edge Metadata: {}", napkin.edge_metadata.len()));
+                });
+                ui.add_space(20.0); // Spacing between sections
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label("Right Section");
+                });
+            });
+        })
+        .response
+        .rect
+        .height();
+
+    occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
+        .resizable(true)
+        .frame(atlas_panel_frame)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                // Left side with menu buttons
+                ui.menu_button("File", |ui| {
+                    ui.menu_button("New", |ui| {
+                        if ui.button("Node").clicked() {
+                            // Logic for creating a new node
+                        }
+                        if ui.button("Edge").clicked() {
+                            // Logic for creating a new edge
+                        }
+                    });
+                });
+                ui.menu_button("Edit", |ui| {
+                    // Placeholder for future edit options
+                });
+
+                ui.horizontal_centered(|ui| {
+                    if ui.button("Perform Action").clicked() {
+                        // Logic for the main action
+                    }
+                });
+
+                // Right side with more placeholder text
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Placeholder").clicked() {}
+                });
+            });
+
+            ui.collapsing("Project Details", |ui| {
+                ui.group(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            if let Some(project) = &napkin.projects.iter().find(|&project| {
+                                Some(&project.id) == napkin.selected_project.as_ref()
+                            }) {
+                                format!("Current Project: @{}/{}", &project.scope, &project.name)
+                            } else {
+                                "Current Project: None".to_string()
+                            },
+                        )
+                        .highlight();
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            if ui.small_button("X").clicked() {
+                                napkin.selected_project = None;
+                            }
+                        });
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label("Search:");
+                        ui.text_edit_singleline(&mut napkin.project_search_string);
+                    });
+                    let project_search_string = napkin.project_search_string.clone();
+                    let filtered_projects = napkin
+                        .projects
+                        .iter()
+                        .filter(|project| {
+                            format!("@{}/{}", project.scope, project.name)
+                                .contains(&project_search_string)
+                        })
+                        .cloned() // Clone the filtered projects to avoid borrowing issue
+                        .collect::<Vec<_>>();
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            for project in filtered_projects {
+                                if ui
+                                    .button(RichText::new(format!(
+                                        "@{}/{}",
+                                        project.scope, project.name
+                                    )))
+                                    .clicked()
+                                {
+                                    napkin.selected_project = Some(project.id.clone());
+                                }
+                            }
+                        })
+                    });
+                });
+            });
+        })
+        .response
+        .rect
+        .height();
 
     occupied_screen_space.left = egui::SidePanel::left("left_panel")
         .resizable(true)
@@ -327,66 +442,11 @@ fn setup_ui(
         .response
         .rect
         .width();
-    occupied_screen_space.top =
-        egui::TopBottomPanel::top("top_panel")
-            .resizable(true)
-            .frame(atlas_panel_frame)
-            .show(ctx, |ui| {
-                ui.group(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            if let Some(project) = &napkin.projects.iter().find(|&project| {
-                                Some(&project.id) == napkin.selected_project.as_ref()
-                            }) {
-                                format!("Current Project: @{}/{}", &project.scope, &project.name)
-                            } else {
-                                "Current Project: None".to_string()
-                            },
-                        )
-                        .highlight();
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                            if ui.small_button("X").clicked() {
-                                napkin.selected_project = None;
-                            }
-                        });
-                    });
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("Search:");
-                        ui.text_edit_singleline(&mut napkin.project_search_string);
-                    });
-                    let project_search_string = napkin.project_search_string.clone();
-                    let filtered_projects = napkin
-                        .projects
-                        .iter()
-                        .filter(|project| {
-                            format!("@{}/{}", project.scope, project.name)
-                                .contains(&project_search_string)
-                        })
-                        .cloned() // Clone the filtered projects to avoid borrowing issue
-                        .collect::<Vec<_>>();
-                    egui::ScrollArea::horizontal().show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            for project in filtered_projects {
-                                if ui
-                                    .button(RichText::new(format!(
-                                        "@{}/{}",
-                                        project.scope, project.name
-                                    )))
-                                    .clicked()
-                                {
-                                    napkin.selected_project = Some(project.id.clone());
-                                }
-                            }
-                        })
-                    });
-                });
-            })
-            .response
-            .rect
-            .height();
-    occupied_screen_space.bottom = egui::TopBottomPanel::bottom("bottom_panel")
+
+    egui::Window::new("bottom_panel")
         .resizable(true)
-        .frame(atlas_panel_frame)
+        .frame(atlas_window_frame)
+        .default_pos(egui::pos2(0.0, ctx.available_rect().bottom()))
         .show(ctx, |ui| {
             ui.group(|ui| {
                 ui.label("Node/Edge/Metadata Viewer/Editor");
@@ -428,10 +488,7 @@ fn setup_ui(
                 }
             });
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
-        })
-        .response
-        .rect
-        .height();
+        });
     occupied_screen_space.right = egui::SidePanel::right("right_panel")
         .resizable(true)
         .frame(atlas_panel_frame)
