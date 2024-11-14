@@ -328,7 +328,7 @@ pub fn node_spawner(
         let radius = total_nodes as f32 * 0.3;
         Vec3::new(
             radius * angle.cos(),
-            0.5 * angle.sin() + 0.5,
+            0.5,
             radius * angle.sin(),
         )
     }

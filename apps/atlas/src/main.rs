@@ -146,6 +146,7 @@ struct AtlasDiagnostics {
     fps_log: Vec<(f64, f64)>, // Tuple (uptime_at, fps)
     uptime: f64,
     debug_mode: bool,
+    show_fps_graph: bool,
 }
 
 fn main() {
@@ -531,7 +532,8 @@ fn setup_ui(
                             ui.label(egui::RichText::new("FPS:").strong());
                         });
                     });
-                    Plot::new("my_plot")
+                    if atlas_diagnostics.show_fps_graph {
+                        Plot::new("my_plot")
                         .view_aspect(3.0)
                         .show_axes(Vec2b { x: false, y: false })
                         .label_formatter(|name, value| {
@@ -542,11 +544,13 @@ fn setup_ui(
                             }
                         })
                         .show(ui, |plot_ui| plot_ui.line(line));
+                    }
 
                     ui.horizontal(|ui| {
                         ui.with_layout(
                             egui::Layout::centered_and_justified(egui::Direction::TopDown),
                             |ui| {
+                                ui.checkbox(&mut atlas_diagnostics.show_fps_graph, "Show FPS Graph");
                                 ui.checkbox(&mut atlas_diagnostics.debug_mode, "Debug Mode");
                             },
                         );
