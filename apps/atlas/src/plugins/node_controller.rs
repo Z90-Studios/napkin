@@ -1,0 +1,276 @@
+use bevy::{prelude::*, window::{CursorGrabMode, PrimaryWindow}};
+use bevy_egui::{
+    egui::{self, Color32, CursorIcon},
+    EguiContexts,
+};
+use bevy_http_client::prelude::TypedResponse;
+use bevy_rapier2d::{
+    dynamics::{GravityScale, RigidBody},
+    geometry::{Collider, CollisionGroups, Group, SolverGroups},
+    pipeline::QueryFilter,
+    plugin::RapierContext,
+};
+use std::fmt;
+
+use crate::{NapkinNode, NapkinSettings};
+
+pub struct NodeControllerPlugin;
+
+impl Plugin for NodeControllerPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (
+                run_node_controller,
+                node_spawner,
+                node_destroyer,
+                cast_ray,
+                handle_node_physics,
+            )
+        );
+    }
+}
+
+#[derive(Component)]
+pub struct HoveredNode;
+
+#[derive(Component)]
+pub struct NodeController {
+    pub project: String,
+    pub id: String,
+}
+
+impl Default for NodeController {
+    fn default() -> Self {
+        Self {
+            project: "Unknown".to_string(),
+            id: "1234".to_string(),
+        }
+    }
+}
+
+impl fmt::Display for NodeController {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Node created ( project = {:?}, id = {:?} )",
+            self.project, self.id
+        )
+    }
+}
+
+fn run_node_controller(
+    mut napkin: ResMut<NapkinSettings>,
+    _time: Res<Time>,
+    mut node_set: ParamSet<(
+        Query<(&GlobalTransform, &mut Transform, &mut NodeController), Without<Camera>>,
+        Query<(&mut HoveredNode, &NodeController), Without<Camera>>,
+    )>,
+) {
+    let mut new_selected_nodes: Vec<NapkinNode> = Vec::new();
+    for (_, node_controller) in node_set.p1().iter_mut() {
+        new_selected_nodes.push(NapkinNode {
+            project: node_controller.project.clone(),
+            id: node_controller.id.clone(),
+        });
+    }
+    napkin.hovered_nodes = Some(new_selected_nodes);
+}
+
+fn node_spawner(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut napkin: ResMut<NapkinSettings>,
+    existing_nodes: Query<&mut NodeController>,
+    mut ev_response: EventReader<TypedResponse<Vec<NapkinNode>>>,
+) {
+    for response in ev_response.read() {
+        info!("Received nodes from server");
+        napkin.nodes = response.to_vec();
+    }
+    let mut filtered_nodes: Vec<&NapkinNode> = napkin.nodes.iter().collect();
+    if let Some(selected_project) = &napkin.selected_project {
+        if !selected_project.is_empty() {
+            filtered_nodes.retain(|&node| node.project == *selected_project);
+        }
+    }
+    fn calculate_balanced_start_point(index: usize, total_nodes: usize) -> Vec2 {
+        let angle = 2.0 * std::f32::consts::PI * (index as f32) / (total_nodes as f32);
+        let radius = total_nodes as f32 * 30.0;
+        Vec2::new(
+            radius * angle.cos(),
+            radius * angle.sin(),
+        )
+    }
+
+    let total_nodes = filtered_nodes.len();
+    for (index, node) in filtered_nodes.iter().enumerate() {
+        if existing_nodes.iter().all(|existing_node| existing_node.id != node.id) {
+            info!("Adding node of ID {}", node.id);
+            let start_point = calculate_balanced_start_point(index, total_nodes);
+            let transform = Transform::from_translation(start_point.extend(0.));
+            commands.spawn((
+                    bevy::sprite::MaterialMesh2dBundle {
+                        mesh: meshes.add(Circle::new(10.0)).into(),
+                        transform,
+                        material: materials.add(ColorMaterial::from(Color::WHITE)),
+                        ..default()
+                    },
+                    NodeController {
+                        project: node.project.clone(),
+                        id: node.id.clone(),
+                    },
+                    RigidBody::Dynamic,
+                    GravityScale(0.0),
+                    Collider::ball(10.0),
+                    CollisionGroups::new(Group::GROUP_13, Group::GROUP_4),
+                    SolverGroups::new(Group::GROUP_13, Group::GROUP_4),
+            ));
+        }
+    }
+}
+
+pub fn node_destroyer(
+    mut commands: Commands,
+    napkin: ResMut<NapkinSettings>,
+    existing_nodes: Query<(Entity, &mut NodeController)>,
+) {
+    if let Some(selected_project) = &napkin.selected_project {
+        if !selected_project.is_empty() {
+            let filtered_nodes = napkin
+                .nodes
+                .iter()
+                .filter(|node| node.project == *selected_project)
+                .collect::<Vec<_>>();
+            for (entity, node) in existing_nodes.iter() {
+                if !filtered_nodes
+                    .iter()
+                    .any(|&filtered_node| filtered_node.id == node.id)
+                {
+                    commands.entity(entity).despawn();
+                }
+            }
+        }
+    }
+}
+
+pub fn cast_ray(
+    mut commands: Commands,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    rapier_context: Res<RapierContext>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    mut nodes: Query<(Entity, &mut Handle<ColorMaterial>), With<NodeController>>,
+    mut contexts: EguiContexts,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let ctx = contexts.ctx_mut();
+    let window = windows.single();
+
+    let Some(cursor_position) = window.cursor_position() else {
+        return;
+    };
+
+    for (camera, camera_transform) in &cameras {
+        // Compute ray from mouse position
+        let Some(point) = camera.viewport_to_world_2d(camera_transform, cursor_position) else {
+            return;
+        };
+        
+        // Don't register hits when rotating camera
+        if window.cursor.grab_mode == CursorGrabMode::Locked {
+            return;
+        }
+
+        let mut entity: Option<Entity> = None;
+        // Cast the ray
+        rapier_context.intersections_with_point(
+            point,
+            QueryFilter::new().groups(CollisionGroups::new(Group::ALL, Group::GROUP_13)),
+            |e| {
+                // Callback called on each collider hit by the ray.
+                entity = Some(e);
+                commands.entity(e).insert(HoveredNode);
+                // if nodes.contains(entity) {
+
+                true // Return `false` instead if we want to stop searching for other hits.
+            },
+        );
+
+        for (n_entity, color_material) in &mut nodes.iter() {
+            let material = materials.get_mut(color_material).unwrap();
+            if entity.is_some() {
+                if n_entity == entity.unwrap() {
+                    // TODO: Move to a CursorIconController
+                    ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
+                    material.color = Color::linear_rgb(1., 0., 0.);
+                }
+            } else {
+                commands.entity(n_entity).remove::<HoveredNode>();
+                material.color = Color::WHITE;
+            }
+        }
+        // if let Some((entity, _toi)) = hit {
+        //     commands.entity(entity).insert(HoveredNode);
+        //     ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
+        // }
+
+        // for entity in existing_hover.iter() {
+        //     if let Some((hit_entity, _)) = hit {
+        //         if entity != hit_entity {
+        //             commands.entity(entity).remove::<HoveredNode>();
+        //         }
+        //     } else {
+        //         commands.entity(entity).remove::<HoveredNode>();
+        //     }
+        // }
+    }
+}
+
+fn handle_node_physics(
+    mut query: Query<(&mut Transform, &NodeController)>,
+    time: Res<Time>,
+    napkin: Res<NapkinSettings>,
+) {
+    let center = Vec3::ZERO; // Define center (vec3 for transforms)
+    let nodes = query
+        .iter_mut()
+        .map(|(transform, node_controller)| (transform.translation, node_controller))
+        .collect::<Vec<_>>();
+    let mut velocities = vec![Vec3::ZERO; nodes.len()];
+
+    let delta_time = time.delta_seconds();
+
+    for i in 0..nodes.len() {
+        let node_position = nodes[i].0;
+        // Attraction to center
+        let center_direction = center - node_position;
+        let center_distance = center_direction.length();
+        if center_distance > 0.0 {
+            let center_force_magnitude = center_distance * 0.2;
+            velocities[i] += center_direction.normalize() * center_force_magnitude * delta_time;
+        }
+
+        // Repulsion between nodes
+        for j in 0..nodes.len() {
+            if i != j {
+                let direction = node_position - nodes[j].0;
+                let distance = direction.length();
+                let repulsion_factor = 0.6;
+                // Repulsive force inverse to distance
+                let force_magnitude = repulsion_factor / distance.max(0.2);
+                velocities[i] += direction.normalize() * force_magnitude * delta_time;    
+            }
+        }
+    }
+
+    // Update positions and apply damping to simulate friction
+    let damping_factor = 0.85;
+    for (i, (mut transform, _)) in query.iter_mut().enumerate() {
+        velocities[i] *= damping_factor;
+        transform.translation += velocities[i];
+        if velocities[i].length() < 0.1 {
+            velocities[i] = Vec3::ZERO;
+        }
+    }
+}

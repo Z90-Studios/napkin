@@ -1,6 +1,10 @@
+use std::time::Duration;
+
 use bevy::sprite::Material2d;
+use bevy::time::Stopwatch;
 use bevy::{prelude::*, window::CursorGrabMode};
 use bevy::window::PrimaryWindow;
+use bevy_egui::egui::Color32;
 use bevy_egui::{
     egui,
     egui::CursorIcon,
@@ -13,7 +17,11 @@ use bevy_http_client::prelude::*;
 mod types;
 mod plugins;
 
-use plugins::camera_controller::{CameraController, CameraControllerPlugin};
+use plugins::{
+    camera_controller::{CameraController, CameraControllerPlugin},
+    napkin_controller::NapkinPlugin,
+    node_controller::NodeControllerPlugin,
+};
 use types::napkin_types::*;
 
 #[derive(Default, Resource)]
@@ -24,47 +32,12 @@ pub struct OccupiedScreenSpace {
     bottom: f32,
 }
 
-#[derive(Component)]
-pub struct HoveredNode;
-
-#[derive(Component)]
-pub struct NodeController {
-    project: String,
-    id: String,
-}
-
-pub struct NodeControllerPlugin;
-
-impl Plugin for NodeControllerPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                run_node_controller,
-                // node_tooltip,
-                cast_ray,
-                // node_spawner,
-                // node_destroyer,
-                // handle_node_click,
-                // handle_node_physics,
-            ),
-        );
-    }
-}
-
-impl Default for NodeController {
-    fn default() -> Self {
-        Self {
-            project: "Unknown".to_string(),
-            id: "1234".to_string(),
-        }
-    }
-}
-
 #[derive(Resource)]
 pub struct NapkinSettings {
     server_url: String,
-    is_connected: bool,
+    initialized: bool,
+    uptime: Stopwatch,
+    refresh_timer: Timer,
     selected_project: Option<String>, // Project UUID
     // napkin_crosshair: NapkinCrosshair,
     hovered_nodes: Option<Vec<NapkinNode>>,
@@ -83,7 +56,9 @@ impl Default for NapkinSettings {
     fn default() -> Self {
         Self {
             server_url: "http://127.0.0.1:28527".to_string(),
-            is_connected: false,
+            initialized: false,
+            uptime: Stopwatch::default(),
+            refresh_timer: Timer::new(Duration::from_secs(60), TimerMode::Repeating),
             selected_project: None,
             // napkin_crosshair: NapkinCrosshair::default(),
             hovered_nodes: None,
@@ -104,6 +79,7 @@ fn main() {
     App::new()
         .init_resource::<OccupiedScreenSpace>()
         .init_resource::<NapkinSettings>()
+        .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.05)))
         .register_request_type::<Vec<NapkinProject>>()
         .register_request_type::<Vec<NapkinNode>>()
         .register_request_type::<Vec<NapkinEdge>>()
@@ -115,12 +91,13 @@ fn main() {
         // .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins((
             HttpClientPlugin,
+            NapkinPlugin,
             NodeControllerPlugin,
             CameraControllerPlugin,
         ))
         // Systems that create Egui widgets should be run during the `CoreSet::Update` set,
         // or after the `EguiSet::BeginPass` system (which belongs to the `CoreSet::PreUpdate` set).
-        .add_systems(Startup, (setup_camera, test_node))
+        .add_systems(Startup, (configure_visuals_system, setup_camera))
         .add_systems(Update, setup_ui)
         .run();
 }
@@ -132,137 +109,54 @@ pub fn setup_camera(mut commands: Commands) {
     ));
 }
 
-pub fn run_node_controller(
-    mut napkin: ResMut<NapkinSettings>,
-    _time: Res<Time>,
-    mut node_set: ParamSet<(
-        Query<(&GlobalTransform, &mut Transform, &mut NodeController), Without<Camera>>,
-        Query<(&mut HoveredNode, &NodeController), Without<Camera>>,
-    )>,
-) {
-    // let target = camera.single();
-    // for (global_transform, mut node_pos, mut node_controller) in node_set.p0().iter_mut() {
-    //     let start = node_pos.translation;
-    //     let forward = start - target.translation;
-    //     node_pos.look_at(start + forward, Vec2::Y);
-    //     node_controller.position = global_transform.translation();
-    // }
-
-    let mut new_selected_nodes: Vec<NapkinNode> = Vec::new();
-    for (_, node_controller) in node_set.p1().iter_mut() {
-        new_selected_nodes.push(NapkinNode {
-            project: node_controller.project.clone(),
-            id: node_controller.id.clone(),
-        });
-    }
-    napkin.hovered_nodes = Some(new_selected_nodes);
-}
-
-pub fn cast_ray(
-    mut commands: Commands,
-    windows: Query<&Window, With<PrimaryWindow>>,
-    rapier_context: Res<RapierContext>,
-    cameras: Query<(&Camera, &GlobalTransform)>,
-    mut nodes: Query<(Entity, &mut Handle<ColorMaterial>), With<NodeController>>,
-    mut contexts: EguiContexts,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    let ctx = contexts.ctx_mut();
-    let window = windows.single();
-
-    let Some(cursor_position) = window.cursor_position() else {
-        return;
-    };
-
-    for (camera, camera_transform) in &cameras {
-        // Compute ray from mouse position
-        let Some(point) = camera.viewport_to_world_2d(camera_transform, cursor_position) else {
-            return;
-        };
-        
-        // Don't register hits when rotating camera
-        if window.cursor.grab_mode == CursorGrabMode::Locked {
-            return;
-        }
-
-        let mut entity: Option<Entity> = None;
-        // Cast the ray
-        rapier_context.intersections_with_point(
-            point,
-            QueryFilter::new().groups(CollisionGroups::new(Group::ALL, Group::GROUP_13)),
-            |e| {
-                // Callback called on each collider hit by the ray.
-                entity = Some(e);
-                commands.entity(e).insert(HoveredNode);
-                // if nodes.contains(entity) {
-
-                true // Return `false` instead if we want to stop searching for other hits.
-            },
-        );
-
-        for (n_entity, color_material) in &mut nodes.iter() {
-            let material = materials.get_mut(color_material).unwrap();
-            if entity.is_some() {
-                if n_entity == entity.unwrap() {
-                    // TODO: Move to a CursorIconController
-                    ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
-                    material.color = Color::linear_rgb(1., 0., 0.);
-                }
-            } else {
-                commands.entity(n_entity).remove::<HoveredNode>();
-                material.color = Color::WHITE;
-            }
-        }
-        // if let Some((entity, _toi)) = hit {
-        //     commands.entity(entity).insert(HoveredNode);
-        //     ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
-        // }
-
-        // for entity in existing_hover.iter() {
-        //     if let Some((hit_entity, _)) = hit {
-        //         if entity != hit_entity {
-        //             commands.entity(entity).remove::<HoveredNode>();
-        //         }
-        //     } else {
-        //         commands.entity(entity).remove::<HoveredNode>();
-        //     }
-        // }
-    }
-}
-
-fn test_node(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    commands.spawn((
-        bevy::sprite::MaterialMesh2dBundle {
-            mesh: meshes.add(Circle::new(10.0)).into(),
-            transform: Transform::default(),
-            material: materials.add(ColorMaterial::from(Color::WHITE)),
-            ..default()
-        },
-        NodeController::default(),
-        RigidBody::Dynamic,
-        Collider::ball(10.0),
-        GravityScale(0.0),
-        // Assign the node to collision group 13 and allow it to collide with group 4
-        CollisionGroups::new(Group::GROUP_13, Group::GROUP_4),
-        // Assign the node to solver group 3 and allow interaction with solver group 11
-        SolverGroups::new(Group::GROUP_13, Group::GROUP_4),
-    ));
+pub fn configure_visuals_system(mut contexts: EguiContexts) {
+    let mut atlas_visuals = egui::Visuals::default();
+    atlas_visuals.window_rounding = 0.0.into();
+    atlas_visuals.window_fill = egui::Color32::from_black_alpha((255. * 0.9) as u8);
+    atlas_visuals.window_stroke = egui::Stroke::new(0.2, egui::Color32::from_white_alpha(255));
+    atlas_visuals.widgets.noninteractive.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.widgets.inactive.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.widgets.active.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.widgets.hovered.bg_fill = Color32::TRANSPARENT;
+    atlas_visuals.menu_rounding = 0.0.into();
+    contexts.ctx_mut().set_visuals(atlas_visuals);
 }
 
 fn setup_ui(
     mut contexts: EguiContexts,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
+    mut napkin: ResMut<NapkinSettings>,
 ) {
     let ctx = contexts.ctx_mut();
 
+    let atlas_panel_frame = egui::Frame {
+        fill: egui::Color32::from_black_alpha((255. * 0.9) as u8),
+        inner_margin: egui::Margin {
+            left: 4.,
+            right: 4.,
+            top: 4.,
+            bottom: 4.,
+        },
+        ..egui::Frame::none()
+    };
+    let atlas_window_frame = egui::Frame {
+        fill: egui::Color32::from_black_alpha((255. * 0.9) as u8),
+        inner_margin: egui::Margin {
+            left: 4.,
+            right: 4.,
+            top: 4.,
+            bottom: 4.,
+        },
+        stroke: egui::Stroke::new(0.2, Color32::from_white_alpha(255)),
+        ..egui::Frame::none()
+    };
+
     occupied_screen_space.left = egui::SidePanel::left("left_panel")
         .resizable(true)
+        .frame(atlas_panel_frame)
         .show(ctx, |ui| {
             ui.label("Atlas 2d");
+            ui.label(format!("Uptime: {}s", napkin.uptime.elapsed_secs()));
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
