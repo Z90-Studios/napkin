@@ -17,6 +17,7 @@ use bevy_http_client::prelude::*;
 mod types;
 mod plugins;
 
+use plugins::edge_controller::EdgeControllerPlugin;
 use plugins::{
     camera_controller::{CameraController, CameraControllerPlugin},
     napkin_controller::NapkinPlugin,
@@ -46,7 +47,7 @@ pub struct NapkinSettings {
     // selected_edges: Option<Vec<String>>,     // Same, but separated for fun
     nodes: Vec<NapkinNode>,
     // node_metadata: Vec<NapkinNodeMetadata>,
-    // edges: Vec<NapkinEdge>,
+    edges: Vec<NapkinEdge>,
     // edge_metadata: Vec<NapkinEdgeMetadata>,
     // projects: Vec<NapkinProject>,
     project_search_string: String,
@@ -67,7 +68,7 @@ impl Default for NapkinSettings {
             // selected_edges: None,
             nodes: Vec::new(),
             // node_metadata: Vec::new(),
-            // edges: Vec::new(),
+            edges: Vec::new(),
             // edge_metadata: Vec::new(),
             // projects: Vec::new(),
             project_search_string: String::new(),
@@ -93,7 +94,9 @@ fn main() {
             HttpClientPlugin,
             NapkinPlugin,
             NodeControllerPlugin,
+            EdgeControllerPlugin,
             CameraControllerPlugin,
+            RapierDebugRenderPlugin::default(),
         ))
         // Systems that create Egui widgets should be run during the `CoreSet::Update` set,
         // or after the `EguiSet::BeginPass` system (which belongs to the `CoreSet::PreUpdate` set).

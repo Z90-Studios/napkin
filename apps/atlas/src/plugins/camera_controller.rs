@@ -7,6 +7,9 @@ use std::{f32::consts::*, fmt};
 
 use crate::OccupiedScreenSpace;
 
+use super::edge_controller::HoveredEdge;
+use super::node_controller::HoveredNode;
+
 pub struct CameraControllerPlugin;
 
 impl Plugin for CameraControllerPlugin {
@@ -88,6 +91,8 @@ pub fn run_camera_controller(
     key_input: Res<ButtonInput<KeyCode>>,
     mut mouse_cursor_grab: Local<bool>,
     mut query: Query<(&mut Transform, &mut CameraController, &mut OrthographicProjection), With<Camera>>,
+    hovered_nodes: Query<&mut HoveredNode, Without<Camera>>,
+    hovered_edges: Query<&mut HoveredEdge, Without<Camera>>,
 ) {
     let ctx = contexts.ctx_mut();
     let mut primary_window = windows.single_mut();
@@ -97,6 +102,16 @@ pub fn run_camera_controller(
         if !controller.initialized {
             controller.initialized = true;
             info!("{}", *controller);
+        }
+
+        let cursor_grab = *mouse_cursor_grab;
+        if !cursor_grab {
+            if !hovered_nodes.is_empty() || !hovered_edges.is_empty() {
+                controller.enabled = false;
+                return;
+            } else {
+                controller.enabled = true;
+            }
         }
 
         if !controller.enabled {
@@ -167,7 +182,7 @@ pub fn run_camera_controller(
             *mouse_cursor_grab = false;
             cursor_grab_change = true;
         }
-        let cursor_grab = *mouse_cursor_grab;
+
 
         // Apply movement
         if axis_input != Vec2::ZERO {
@@ -206,7 +221,7 @@ pub fn run_camera_controller(
         let mut mouse_delta = Vec2::ZERO;
         if cursor_grab {
             for mouse_event in mouse_events.read() {
-                mouse_delta += mouse_event.delta;
+                mouse_delta += mouse_event.delta * projection.scale;
             }
             ctx.output_mut(|o| o.cursor_icon = CursorIcon::Move);
         } else {

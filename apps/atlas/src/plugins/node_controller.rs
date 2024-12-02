@@ -104,15 +104,17 @@ fn node_spawner(
         )
     }
 
+    let node_size: f32 = 6.0;
+
     let total_nodes = filtered_nodes.len();
     for (index, node) in filtered_nodes.iter().enumerate() {
         if existing_nodes.iter().all(|existing_node| existing_node.id != node.id) {
             info!("Adding node of ID {}", node.id);
             let start_point = calculate_balanced_start_point(index, total_nodes);
-            let transform = Transform::from_translation(start_point.extend(0.));
+            let transform = Transform::from_translation(start_point.extend(1.));
             commands.spawn((
                     bevy::sprite::MaterialMesh2dBundle {
-                        mesh: meshes.add(Circle::new(10.0)).into(),
+                        mesh: meshes.add(Circle::new(node_size)).into(),
                         transform,
                         material: materials.add(ColorMaterial::from(Color::WHITE)),
                         ..default()
@@ -123,7 +125,7 @@ fn node_spawner(
                     },
                     RigidBody::Dynamic,
                     GravityScale(0.0),
-                    Collider::ball(10.0),
+                    Collider::ball(node_size),
                     CollisionGroups::new(Group::GROUP_13, Group::GROUP_4),
                     SolverGroups::new(Group::GROUP_13, Group::GROUP_4),
             ));
@@ -247,7 +249,7 @@ fn handle_node_physics(
         let center_direction = center - node_position;
         let center_distance = center_direction.length();
         if center_distance > 0.0 {
-            let center_force_magnitude = center_distance * 0.2;
+            let center_force_magnitude = center_distance * 0.4;
             velocities[i] += center_direction.normalize() * center_force_magnitude * delta_time;
         }
 
@@ -256,9 +258,13 @@ fn handle_node_physics(
             if i != j {
                 let direction = node_position - nodes[j].0;
                 let distance = direction.length();
-                let repulsion_factor = 0.6;
+                let connected = napkin.edges.iter().any(|edge|
+                    (edge.source == nodes[i].1.id && edge.target == nodes[j].1.id) ||
+                    (edge.source == nodes[i].1.id && edge.source == nodes[j].1.id)
+                );
+                let repulsion_factor = if connected { 500.0 } else { 1000.0 };
                 // Repulsive force inverse to distance
-                let force_magnitude = repulsion_factor / distance.max(0.2);
+                let force_magnitude = repulsion_factor / distance.max(50.0);
                 velocities[i] += direction.normalize() * force_magnitude * delta_time;    
             }
         }

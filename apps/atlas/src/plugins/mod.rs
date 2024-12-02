@@ -1,3 +1,4 @@
 pub mod camera_controller;
 pub mod napkin_controller;
 pub mod node_controller;
+pub mod edge_controller;
