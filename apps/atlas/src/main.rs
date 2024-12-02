@@ -19,6 +19,7 @@ mod plugins;
 
 use plugins::edge_controller::EdgeControllerPlugin;
 use plugins::{
+    debug_controller::{DebugState, DebugControllerPlugin},
     camera_controller::{CameraController, CameraControllerPlugin},
     napkin_controller::NapkinPlugin,
     node_controller::NodeControllerPlugin,
@@ -91,12 +92,12 @@ fn main() {
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(50.0))
         // .add_plugins(RapierDebugRenderPlugin::default())
         .add_plugins((
+            DebugControllerPlugin,
             HttpClientPlugin,
             NapkinPlugin,
             NodeControllerPlugin,
             EdgeControllerPlugin,
             CameraControllerPlugin,
-            RapierDebugRenderPlugin::default(),
         ))
         // Systems that create Egui widgets should be run during the `CoreSet::Update` set,
         // or after the `EguiSet::BeginPass` system (which belongs to the `CoreSet::PreUpdate` set).
@@ -129,6 +130,7 @@ fn setup_ui(
     mut contexts: EguiContexts,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
     mut napkin: ResMut<NapkinSettings>,
+    mut debug_state: ResMut<DebugState>,
 ) {
     let ctx = contexts.ctx_mut();
 
@@ -161,6 +163,7 @@ fn setup_ui(
             ui.label("Atlas 2d");
             ui.label(format!("Uptime: {}s", napkin.uptime.elapsed_secs()));
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+            ui.checkbox(&mut debug_state.rapier_debug_enabled, "Debug Mode");
         })
         .response
         .rect

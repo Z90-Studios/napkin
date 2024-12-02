@@ -23,15 +23,15 @@ pub struct CameraController {
     pub enabled: bool,
     pub initialized: bool,
     pub sensitivity: f32,
-    pub key_up: KeyCode,
-    pub key_down: KeyCode,
-    pub key_left: KeyCode,
-    pub key_right: KeyCode,
-    pub key_run: KeyCode,
+    //pub key_up: KeyCode,
+    //pub key_down: KeyCode,
+    //pub key_left: KeyCode,
+    //pub key_right: KeyCode,
+    //pub key_run: KeyCode,
     pub mouse_key_cursor_grab: MouseButton,
     pub scroll_factor: f32,
-    pub walk_speed: f32,
-    pub run_speed: f32,
+    //pub walk_speed: f32,
+    //pub run_speed: f32,
     pub friction: f32,
     pub velocity: Vec2,
 }
@@ -42,15 +42,15 @@ impl Default for CameraController {
             enabled: true,
             initialized: false,
             sensitivity: 1.0,
-            key_up: KeyCode::KeyW,
-            key_down: KeyCode::KeyS,
-            key_left: KeyCode::KeyA,
-            key_right: KeyCode::KeyD,
-            key_run: KeyCode::ShiftLeft,
+            //key_up: KeyCode::KeyW,
+            //key_down: KeyCode::KeyS,
+            //key_left: KeyCode::KeyA,
+            //key_right: KeyCode::KeyD,
+            //key_run: KeyCode::ShiftLeft,
             mouse_key_cursor_grab: MouseButton::Left,
             scroll_factor: 1.25,
-            walk_speed: 200.0,
-            run_speed: 500.0,
+            //walk_speed: 200.0,
+            //run_speed: 500.0,
             friction: 0.5,
             velocity: Vec2::ZERO,
         }
@@ -65,16 +65,16 @@ impl fmt::Display for CameraController {
 Freecam Controls:
     Mouse\t- Move camera orientation
     Scroll\t- Adjust movement speed
-    {:?}\t- Hold to pan
-    {:?} & {:?}\t- Move up & down
-    {:?} & {:?}\t- Move left & right
-    {:?}\t- Move faster while held",
+    {:?}\t- Hold to pan",
+//    {:?} & {:?}\t- Move up & down
+//    {:?} & {:?}\t- Move left & right
+//    {:?}\t- Move faster while held",
             self.mouse_key_cursor_grab,
-            self.key_up,
-            self.key_down,
-            self.key_left,
-            self.key_right,
-            self.key_run,
+            //self.key_up,
+            //self.key_down,
+            //self.key_left,
+            //self.key_right,
+            //self.key_run,
         )
     }
 }
@@ -105,53 +105,29 @@ pub fn run_camera_controller(
         }
 
         let cursor_grab = *mouse_cursor_grab;
-        if !cursor_grab {
-            if !hovered_nodes.is_empty() || !hovered_edges.is_empty() {
-                controller.enabled = false;
-                return;
-            } else {
-                controller.enabled = true;
-            }
-        }
 
-        if !controller.enabled {
+        if !controller.enabled && !cursor_grab {
             mouse_events.clear();
             return;
         }
 
-        let mut scroll = 0.0;
-        for scroll_event in scroll_events.read() {
-            let amount = match scroll_event.unit {
-                MouseScrollUnit::Line => scroll_event.y,
-                MouseScrollUnit::Pixel => scroll_event.y / 16.0,
-            };
-            scroll += amount;
-        }
-        if scroll != 0.0 {
-            if scroll > 0.0 {
-                projection.scale /= controller.scroll_factor * scroll;
-            }
-            if scroll < 0.0 {
-                projection.scale *= controller.scroll_factor * scroll;
-            }
-        }
         
-        controller.run_speed = controller.walk_speed * 3.0;
+        //controller.run_speed = controller.walk_speed * 3.0;
 
         // Key input
-        let mut axis_input = Vec2::ZERO;
-        if key_input.pressed(controller.key_up) {
-            axis_input.y += 1.0;
-        }
-        if key_input.pressed(controller.key_down) {
-            axis_input.y -= 1.0;
-        }
-        if key_input.pressed(controller.key_right) {
-            axis_input.x += 1.0;
-        }
-        if key_input.pressed(controller.key_left) {
-            axis_input.x -= 1.0;
-        }
+        //let mut axis_input = Vec2::ZERO;
+        //if key_input.pressed(controller.key_up) {
+        //    axis_input.y += 1.0;
+        //}
+        //if key_input.pressed(controller.key_down) {
+        //    axis_input.y -= 1.0;
+        //}
+        //if key_input.pressed(controller.key_right) {
+        //    axis_input.x += 1.0;
+        //}
+        //if key_input.pressed(controller.key_left) {
+        //    axis_input.x -= 1.0;
+        //}
 
         let mouse_border_offset = 5.0;
 
@@ -173,6 +149,24 @@ pub fn run_camera_controller(
             }
         }
 
+        let mut scroll = 0.0;
+        for scroll_event in scroll_events.read() {
+            let amount = match scroll_event.unit {
+                MouseScrollUnit::Line => scroll_event.y,
+                MouseScrollUnit::Pixel => scroll_event.y / 16.0,
+            };
+            scroll += amount;
+        }
+        if scroll != 0.0 {
+            if scroll > 0.0 {
+                projection.scale /= controller.scroll_factor * scroll;
+            }
+            if scroll < 0.0 {
+                projection.scale *= controller.scroll_factor * scroll;
+            }
+        }
+
+
         let mut cursor_grab_change = false;
         if mouse_button_input.just_pressed(controller.mouse_key_cursor_grab) {
             *mouse_cursor_grab = true;
@@ -185,24 +179,24 @@ pub fn run_camera_controller(
 
 
         // Apply movement
-        if axis_input != Vec2::ZERO {
-            let max_speed = if key_input.pressed(controller.key_run) {
-                controller.run_speed
-            } else {
-                controller.walk_speed
-            };
-            controller.velocity = axis_input.normalize() * max_speed;
-        } else {
-            let friction = controller.friction.clamp(0.0, 1.0);
-            controller.velocity *= 1.0 - friction;
-            if controller.velocity.length_squared() < 1e-6 {
-                controller.velocity = Vec2::ZERO;
-            }
-        }
-        let forward = *transform.up();
-        let right = *transform.right();
-        transform.translation.x += -controller.velocity.x * dt * right.x;
-        transform.translation.y += -controller.velocity.y * dt * forward.y;
+        //if axis_input != Vec2::ZERO {
+        //    let max_speed = if key_input.pressed(controller.key_run) {
+        //        controller.run_speed
+        //    } else {
+        //        controller.walk_speed
+        //    };
+        //    controller.velocity = axis_input.normalize() * max_speed;
+        //} else {
+        //    let friction = controller.friction.clamp(0.0, 1.0);
+        //    controller.velocity *= 1.0 - friction;
+        //    if controller.velocity.length_squared() < 1e-6 {
+        //        controller.velocity = Vec2::ZERO;
+        //    }
+        //}
+        //let forward = *transform.up();
+        //let right = *transform.right();
+        //transform.translation.x += -controller.velocity.x * dt * right.x;
+        //transform.translation.y += -controller.velocity.y * dt * forward.y;
 
         // Handle grab
         if cursor_grab_change {
@@ -231,7 +225,7 @@ pub fn run_camera_controller(
 
         if mouse_delta != Vec2::ZERO {
             transform.translation.y += mouse_delta.y * controller.sensitivity;
-            transform.translation.x += -mouse_delta.x * controller.sensitivity;
+            transform.translation.x -= mouse_delta.x * controller.sensitivity;
         }
     }
 }

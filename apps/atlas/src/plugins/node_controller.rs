@@ -14,6 +14,8 @@ use std::fmt;
 
 use crate::{NapkinNode, NapkinSettings};
 
+use super::camera_controller::CameraController;
+
 pub struct NodeControllerPlugin;
 
 impl Plugin for NodeControllerPlugin {
@@ -157,17 +159,23 @@ pub fn node_destroyer(
     }
 }
 
+pub fn handle_drag(
+    mut hovered_node: Query<&mut Transform, With<HoveredNode>>,
+) {}
+
 pub fn cast_ray(
     mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
     rapier_context: Res<RapierContext>,
     cameras: Query<(&Camera, &GlobalTransform)>,
+    mut camera_controller_query: Query<&mut CameraController>,
     mut nodes: Query<(Entity, &mut Handle<ColorMaterial>), With<NodeController>>,
     mut contexts: EguiContexts,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let ctx = contexts.ctx_mut();
     let window = windows.single();
+    let mut camera_controller = camera_controller_query.get_single_mut().unwrap();
 
     let Some(cursor_position) = window.cursor_position() else {
         return;
@@ -193,6 +201,7 @@ pub fn cast_ray(
                 // Callback called on each collider hit by the ray.
                 entity = Some(e);
                 commands.entity(e).insert(HoveredNode);
+                camera_controller.enabled = false;
                 // if nodes.contains(entity) {
 
                 true // Return `false` instead if we want to stop searching for other hits.
@@ -210,6 +219,7 @@ pub fn cast_ray(
             } else {
                 commands.entity(n_entity).remove::<HoveredNode>();
                 material.color = Color::WHITE;
+                camera_controller.enabled = true;
             }
         }
         // if let Some((entity, _toi)) = hit {
@@ -271,12 +281,12 @@ fn handle_node_physics(
     }
 
     // Update positions and apply damping to simulate friction
-    let damping_factor = 0.85;
+    let damping_factor = 1.2;
     for (i, (mut transform, _)) in query.iter_mut().enumerate() {
         velocities[i] *= damping_factor;
-        transform.translation += velocities[i];
         if velocities[i].length() < 0.1 {
             velocities[i] = Vec3::ZERO;
         }
+        transform.translation += velocities[i];
     }
 }
