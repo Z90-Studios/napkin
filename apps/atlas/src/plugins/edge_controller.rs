@@ -14,7 +14,7 @@ use bevy_rapier2d::{
     pipeline::QueryFilter,
     plugin::RapierContext,
 };
-use std::fmt;
+use std::{f32::consts::PI, fmt};
 
 use crate::{NapkinEdge, NapkinSettings};
 
@@ -155,10 +155,12 @@ fn handle_edge_physics(
                 (target_translation.y + source_translation.y) / 2.0,
                 0.0,
             );
-        let length = source_translation.distance(target_translation);
-        let rotation = Quat::from_rotation_arc(
-            Vec3::Y,
-            (source_translation - target_translation).normalize()
+        let length = (
+            (source_translation.x - target_translation.x).powi(2)
+            + (source_translation.y - target_translation.y).powi(2)
+        ).sqrt();
+        let rotation = Quat::from_rotation_z(
+            ((target_translation.y - source_translation.y) / (target_translation.x - source_translation.x)).atan() + 90.0_f32.to_radians()
         );
         transform.translation = center;
         transform.rotation = rotation;
