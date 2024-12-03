@@ -26,7 +26,7 @@ pub struct DebugState {
 impl Default for DebugState {
     fn default() -> Self {
         Self {
-            rapier_debug_enabled: false,
+            rapier_debug_enabled: true,
         }
     }
 }

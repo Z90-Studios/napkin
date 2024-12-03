@@ -18,7 +18,7 @@ use std::{f32::consts::PI, fmt};
 
 use crate::{NapkinEdge, NapkinSettings};
 
-use super::node_controller::NodeController;
+use super::{camera_controller::{self, CameraController}, node_controller::NodeController};
 
 pub struct EdgeControllerPlugin;
 
@@ -29,6 +29,7 @@ impl Plugin for EdgeControllerPlugin {
                 edge_spawner,
                 edge_destroyer,
                 handle_edge_physics,
+                cast_ray,
         ));
     }
 }
@@ -42,6 +43,7 @@ pub struct EdgeController {
     pub id: String,
     pub source: String,
     pub target: String,
+    pub orig_length: f32,
 }
 
 impl Default for EdgeController {
@@ -51,6 +53,7 @@ impl Default for EdgeController {
             id: "1234".to_string(),
             source: "1234".to_string(),
             target: "1234".to_string(),
+            orig_length: 10.0,
         }
     }
 }
@@ -132,24 +135,96 @@ fn edge_spawner(
                             id: edge.id.clone(),
                             source: edge.source.clone(),
                             target: edge.target.clone(),
+                            orig_length: length,
                         },
                         RigidBody::Dynamic,
                         GravityScale(0.0),
-                        Collider::ball(10.0),
-                        CollisionGroups::new(Group::GROUP_13, Group::GROUP_4),
-                        SolverGroups::new(Group::GROUP_13, Group::GROUP_4),
+                        Collider::cuboid(3.0, length / 2.0),
+                        CollisionGroups::new(Group::GROUP_14, Group::GROUP_4),
+                        SolverGroups::new(Group::GROUP_14, Group::GROUP_4),
                 ));    
             }
         }
     }
 }
 
+fn cast_ray(
+    mut commands: Commands,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    rapier_context: Res<RapierContext>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    mut camera_controller_query: Query<&mut CameraController>,
+    mut edges: Query<(Entity, &mut Handle<ColorMaterial>), With<EdgeController>>,
+    mut contexts: EguiContexts,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let ctx = contexts.ctx_mut();
+    let window = windows.single();
+    let mut camera_controller = camera_controller_query.get_single_mut().unwrap();
+
+    let Some(cursor_position) = window.cursor_position() else {
+        return;
+    };
+
+    for (camera, camera_transform) in &cameras {
+        let Some(point) = camera.viewport_to_world_2d(camera_transform, cursor_position) else {
+            return;
+        };
+
+        if window.cursor.grab_mode == CursorGrabMode::Locked {
+            return;
+        }
+
+        let mut node_match = false;
+        rapier_context.intersections_with_point(
+            point,
+            QueryFilter::new().groups(CollisionGroups::new(Group::GROUP_3, Group::GROUP_13)),
+            |e| {
+                node_match = true;
+
+                true
+            },
+        );
+
+        let mut entity: Option<Entity> = None;
+
+        if !node_match {
+            rapier_context.intersections_with_point(
+                point,
+                QueryFilter::new().groups(CollisionGroups::new(Group::GROUP_4, Group::GROUP_14)),
+                |e| {
+                    entity = Some(e);
+                    commands.entity(e).insert(HoveredEdge);
+                    camera_controller.enabled = false;
+    
+                    true
+                },
+            );
+        }
+
+        for (n_entity, color_material) in &mut edges.iter() {
+            let material = materials.get_mut(color_material).unwrap();
+            if entity.is_some() {
+                if n_entity == entity.unwrap() {
+                    ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
+                    material.color = Color::linear_rgb(66.0 / 255.0, 135.0 / 255.0, 245.0 / 255.0);
+                }
+            } else {
+                commands.entity(n_entity).remove::<HoveredEdge>();
+                material.color = Color::WHITE;
+                camera_controller.enabled = true;
+            }
+        }
+    }
+}
+
 fn handle_edge_physics(
-    mut edges: Query<(&mut Transform, &mut EdgeController, &mut Mesh2dHandle)>,
+    mut commands: Commands,
+    mut edges: Query<(Entity, &mut Transform, &mut EdgeController, &mut Mesh2dHandle)>,
     mut meshes: ResMut<Assets<Mesh>>,
     nodes: Query<(&mut Transform, &mut NodeController), Without<EdgeController>>,
 ) {
-    for (mut transform, mut edge, mut mesh) in edges.iter_mut() {
+    for (mut entity, mut transform, mut edge, mut mesh) in edges.iter_mut() {
         let source_node = nodes.iter().find(|(_, node)| node.id == edge.source).unwrap();
         let target_node = nodes.iter().find(|(_, node)| node.id == edge.target).unwrap();
 
@@ -169,8 +244,12 @@ fn handle_edge_physics(
         );
         transform.translation = center;
         transform.rotation = rotation;
+        if length / edge.orig_length != 1.0 {
+            transform.scale = Vec3::new(1.0, length / edge.orig_length, 1.0);
 
-        mesh.0 = meshes.add(Rectangle::new(1.0, length)).into();
+            //commands.entity(entity).remove::<Collider>();
+            //commands.entity(entity).insert(Collider::cuboid(1.0, length));
+        }       
     }
 }
 

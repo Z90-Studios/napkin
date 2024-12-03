@@ -113,7 +113,7 @@ fn node_spawner(
         if existing_nodes.iter().all(|existing_node| existing_node.id != node.id) {
             info!("Adding node of ID {}", node.id);
             let start_point = calculate_balanced_start_point(index, total_nodes);
-            let transform = Transform::from_translation(start_point.extend(1.));
+            let transform = Transform::from_translation(start_point.extend(100.));
             commands.spawn((
                     bevy::sprite::MaterialMesh2dBundle {
                         mesh: meshes.add(Circle::new(node_size)).into(),
@@ -128,8 +128,8 @@ fn node_spawner(
                     RigidBody::Dynamic,
                     GravityScale(0.0),
                     Collider::ball(node_size),
-                    CollisionGroups::new(Group::GROUP_13, Group::GROUP_4),
-                    SolverGroups::new(Group::GROUP_13, Group::GROUP_4),
+                    CollisionGroups::new(Group::GROUP_13, Group::GROUP_3),
+                    SolverGroups::new(Group::GROUP_13, Group::GROUP_3),
             ));
         }
     }
@@ -196,7 +196,7 @@ pub fn cast_ray(
         // Cast the ray
         rapier_context.intersections_with_point(
             point,
-            QueryFilter::new().groups(CollisionGroups::new(Group::ALL, Group::GROUP_13)),
+            QueryFilter::new().groups(CollisionGroups::new(Group::GROUP_3, Group::GROUP_13)),
             |e| {
                 // Callback called on each collider hit by the ray.
                 entity = Some(e);
@@ -214,7 +214,7 @@ pub fn cast_ray(
                 if n_entity == entity.unwrap() {
                     // TODO: Move to a CursorIconController
                     ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
-                    material.color = Color::linear_rgb(1., 0., 0.);
+                    material.color = Color::linear_rgb(66.0 / 255.0, 135.0 / 255.0, 245.0 / 255.0);
                 }
             } else {
                 commands.entity(n_entity).remove::<HoveredNode>();
@@ -284,7 +284,7 @@ fn handle_node_physics(
     let damping_factor = 1.2;
     for (i, (mut transform, _)) in query.iter_mut().enumerate() {
         velocities[i] *= damping_factor;
-        if velocities[i].length() < 0.1 {
+        if velocities[i].length() < 0.05 {
             velocities[i] = Vec3::ZERO;
         }
         transform.translation += velocities[i];

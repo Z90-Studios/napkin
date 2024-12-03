@@ -82,6 +82,7 @@ fn main() {
     App::new()
         .init_resource::<OccupiedScreenSpace>()
         .init_resource::<NapkinSettings>()
+        .insert_resource(Msaa::Sample8)
         .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.05)))
         .register_request_type::<Vec<NapkinProject>>()
         .register_request_type::<Vec<NapkinNode>>()
@@ -217,25 +218,28 @@ fn setup_ui(
                 })
                 .cloned()
                 .collect::<Vec<NapkinProject>>();
+            
             egui::ScrollArea::vertical()
                 .max_height(300.0)
+                .auto_shrink(false)
                 .show(ui, |ui| {
-                ui.vertical(|ui| {
-                    for project in filtered_projects {
-                        let mut project_button = ui
-                            .button(egui::RichText::new(format!(
-                                "@{}/{}",
-                                project.scope, project.name,
-                            )));
-                        if project_button.clicked() {
-                                napkin.selected_project = Some(project.id.clone());
+                    ui.vertical(|ui| {
+                        for project in filtered_projects {
+                            let mut project_button = ui
+                                .button(egui::RichText::new(format!(
+                                    "@{}/{}",
+                                    project.scope, project.name,
+                                )));
+                            if project_button.clicked() {
+                                    napkin.selected_project = Some(project.id.clone());
+                            }
+                            if napkin.selected_project == Some(project.id) {
+                                project_button.highlight();
+                            }
                         }
-                        if napkin.selected_project == Some(project.id) {
-                            project_button.highlight();
-                        }
-                    }
-                })
-            });
+                    })
+                });
+            ui.separator();
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
