@@ -109,7 +109,9 @@ fn main() {
         .run();
 }
 
-pub fn setup_camera(mut commands: Commands) {
+pub fn setup_camera(
+    mut commands: Commands,
+) {
     commands.spawn((
         Camera2dBundle::default(),
         CameraController::default(),
@@ -178,10 +180,9 @@ fn setup_ui(
         .rect
         .height();
 
-    occupied_screen_space.left = egui::SidePanel::left("left_panel")
+    occupied_screen_space.right = egui::SidePanel::right("right_panel")
         .resizable(true)
-        .min_width(300.0)
-        .max_width(300.0)
+        .min_width(250.0)
         .frame(atlas_panel_frame)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -220,7 +221,7 @@ fn setup_ui(
                 .collect::<Vec<NapkinProject>>();
             
             egui::ScrollArea::vertical()
-                .max_height(300.0)
+                .max_height(200.0)
                 .auto_shrink(false)
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
@@ -245,4 +246,27 @@ fn setup_ui(
         .response
         .rect
         .width();
+
+    let central_panel = egui::CentralPanel::default()
+        .frame(egui::Frame::none().inner_margin(4.0))
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.heading("Atlas");
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                    occupied_screen_space.bottom = ui.horizontal_wrapped(|ui| {
+                        ui.label("Z90 Studios, LLC");
+                    }).response.rect.height();
+                });
+            });
+        });
+
+    central_panel.response.context_menu(|ui| {
+        ui.set_max_width(150.0);
+
+        ui.menu_button("Add", |ui| {
+            ui.button("Project");
+            ui.button("Node");
+            ui.button("Edge");
+        });
+    });
 }
