@@ -1,5 +1,6 @@
 use ::config::Config;
 use actix_web::{get, middleware::Logger, web, App, HttpServer};
+use actix_cors::Cors;
 use clap::Parser;
 use dotenv::dotenv;
 use tokio_postgres::NoTls;
@@ -60,9 +61,12 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         let logger = Logger::default();
+        let cors = Cors::default()
+            .allowed_origin("http://127.0.0.1:1334");
 
         App::new()
             .wrap(logger)
+            .wrap(cors)
             .app_data(web::Data::new(AppState {
                 app_name: String::from("Project: Napkin"),
             }))
