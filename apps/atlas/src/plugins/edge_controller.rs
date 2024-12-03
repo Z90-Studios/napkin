@@ -113,8 +113,13 @@ fn edge_spawner(
                     (target_node.0.translation.y + source_node.0.translation.y) / 2.0,
                     0.0,
                 );
+                let rotation = Quat::from_rotation_z(
+                ((target_node.0.translation.y - source_node.0.translation.y) / (target_node.0.translation.x - source_node.0.translation.x)).atan() + 90.0_f32.to_radians()
+                );
+
                 let length = source_node.0.translation.distance(target_node.0.translation);
-                let transform = Transform::from_translation(center);
+                let mut transform = Transform::from_translation(center);
+                transform.rotation = rotation;
                 commands.spawn((
                         bevy::sprite::MaterialMesh2dBundle {
                             mesh: meshes.add(Rectangle::new(1.0, length)).into(),

@@ -159,10 +159,10 @@ pub fn run_camera_controller(
         }
         if scroll != 0.0 {
             if scroll > 0.0 {
-                projection.scale /= controller.scroll_factor * scroll;
+                projection.scale /= controller.scroll_factor * 1.0;
             }
             if scroll < 0.0 {
-                projection.scale *= controller.scroll_factor * scroll;
+                projection.scale *= controller.scroll_factor * 1.0;
             }
         }
 
@@ -215,7 +215,7 @@ pub fn run_camera_controller(
         let mut mouse_delta = Vec2::ZERO;
         if cursor_grab {
             for mouse_event in mouse_events.read() {
-                mouse_delta += mouse_event.delta * projection.scale;
+                mouse_delta += mouse_event.delta * projection.scale.abs();
             }
             ctx.output_mut(|o| o.cursor_icon = CursorIcon::Move);
         } else {
