@@ -11,9 +11,10 @@ pub struct Project {
 
 impl Project {
     pub fn to_update_str(&self) -> String {
-        let update = "SET scope = $scope, name = $name";
+        let update = "SET scope = '$scope', name = '$name'";
         let update = update.replace("$scope", &self.scope);
         let update = update.replace("$name", &self.name);
+        println!("update string: {}", update);
 
         update
     }
