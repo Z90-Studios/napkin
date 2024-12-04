@@ -42,6 +42,7 @@ pub struct NapkinSettings {
     uptime: Stopwatch,
     refresh_timer: Timer,
     selected_project: Option<String>, // Project UUID
+    context_menu_open: bool,
     // napkin_crosshair: NapkinCrosshair,
     hovered_nodes: Option<Vec<NapkinNode>>,
     // hovered_edges: Option<Vec<NapkinEdge>>,
@@ -63,6 +64,7 @@ impl Default for NapkinSettings {
             uptime: Stopwatch::default(),
             refresh_timer: Timer::new(Duration::from_secs(60), TimerMode::Repeating),
             selected_project: None,
+            context_menu_open: false,
             // napkin_crosshair: NapkinCrosshair::default(),
             hovered_nodes: None,
             // hovered_edges: None,
@@ -78,13 +80,30 @@ impl Default for NapkinSettings {
     }
 }
 
+#[derive(Resource)]
+pub struct NapkinEdits {
+    project: NapkinProject,
+    save_project: bool,
+}
+
+impl Default for NapkinEdits {
+    fn default() -> Self {
+        Self {
+            project: NapkinProject::default(),
+            save_project: false,
+        }
+    }
+}
+
 fn main() {
     App::new()
         .init_resource::<OccupiedScreenSpace>()
         .init_resource::<NapkinSettings>()
+        .init_resource::<NapkinEdits>()
         .insert_resource(Msaa::Sample8)
         .insert_resource(ClearColor(Color::srgb(0.05, 0.05, 0.05)))
         .register_request_type::<Vec<NapkinProject>>()
+        .register_request_type::<NapkinProject>()
         .register_request_type::<Vec<NapkinNode>>()
         .register_request_type::<Vec<NapkinEdge>>()
         .register_request_type::<Vec<NapkinNodeMetadata>>()
@@ -133,8 +152,11 @@ pub fn configure_visuals_system(mut contexts: EguiContexts) {
 
 fn setup_ui(
     mut contexts: EguiContexts,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
     mut napkin: ResMut<NapkinSettings>,
+    mut edits: ResMut<NapkinEdits>,
     mut debug_state: ResMut<DebugState>,
 ) {
     let ctx = contexts.ctx_mut();
@@ -197,7 +219,7 @@ fn setup_ui(
                     );
                 ui.label(selected_project);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui| {
-                    let mut clear_button = ui.small_button("Clear");
+                    let clear_button = ui.small_button("Clear");
                     if clear_button.clicked() {
                         napkin.project_search_string = "".to_string();
                         napkin.selected_project = None;
@@ -205,10 +227,13 @@ fn setup_ui(
                     ui.separator();
                 });
             });
-            ui.add(
-                egui::TextEdit::singleline(&mut napkin.project_search_string)
-                    .hint_text(egui::RichText::new("Search Projects..."))
-            );
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    ui.available_size(),
+                    egui::TextEdit::singleline(&mut napkin.project_search_string)
+                        .hint_text(egui::RichText::new("Search Projects..."))
+                );
+            });
 
             let filtered_projects = napkin
                 .projects
@@ -226,13 +251,14 @@ fn setup_ui(
                 .show(ui, |ui| {
                     ui.vertical(|ui| {
                         for project in filtered_projects {
-                            let mut project_button = ui
+                            let project_button = ui
                                 .button(egui::RichText::new(format!(
                                     "@{}/{}",
                                     project.scope, project.name,
                                 )));
                             if project_button.clicked() {
                                     napkin.selected_project = Some(project.id.clone());
+                                    edits.project = project.clone();
                             }
                             if napkin.selected_project == Some(project.id) {
                                 project_button.highlight();
@@ -241,20 +267,72 @@ fn setup_ui(
                     })
                 });
             ui.separator();
+            if napkin.selected_project.is_none() {
+                ui.label("No project selected");
+            } else {
+                if Some(edits.project.id.clone()) != napkin.selected_project {
+                    for p in napkin.projects.iter() {
+                        if napkin.selected_project == Some(p.id.clone()) {
+                            edits.project = p.clone();
+                        }
+                    }
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(
+                                if edits.project.id.is_empty() { "New Project" } else { &edits.project.id }
+                    ).small()));
+                });
+                egui::Grid::new("project_view")
+                    .num_columns(2)
+                    .spacing([40.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("Scope");
+                        ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.project.scope));
+                        ui.end_row();
+
+                        ui.label("Name");
+                        ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.project.name));
+                        ui.end_row();
+                    });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                    if ui.button(if edits.project.id.is_empty() { "Create" } else { "Apply" })
+                        .clicked() {
+                            edits.save_project = true;
+                        }
+                });
+            }
+            ui.separator();
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
         .rect
         .width();
 
+    fn get_mouse_position(windows: Query<&Window, With<PrimaryWindow>>, cameras: Query<(&Camera, &GlobalTransform)>) -> Option<Vec2> {
+        let window = windows.single();
+        let Some(cursor_position) = window.cursor_position() else {
+            return None;
+        };
+        let camera = cameras.single();
+        let Some(mouse_position) = camera.0.viewport_to_world_2d(camera.1, cursor_position) else {
+            return None;
+        };
+        Some(mouse_position)
+    }
+
     let central_panel = egui::CentralPanel::default()
         .frame(egui::Frame::none().inner_margin(4.0))
         .show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.heading("Atlas");
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                     occupied_screen_space.bottom = ui.horizontal_wrapped(|ui| {
                         ui.label("Z90 Studios, LLC");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let mouse_query = get_mouse_position(windows, cameras);
+                            if let Some(mouse_position) = mouse_query {
+                                ui.label(format!("({:.2},{:.2})", mouse_position.x, mouse_position.y));
+                            }
+                        });
                     }).response.rect.height();
                 });
             });
@@ -264,9 +342,22 @@ fn setup_ui(
         ui.set_max_width(150.0);
 
         ui.menu_button("Add", |ui| {
-            ui.button("Project");
+            if ui.button("Project").clicked() {
+                edits.project = NapkinProject {
+                    id: "".to_string(),
+                    scope: "".to_string(),
+                    name: "".to_string(),
+                };
+                napkin.selected_project = Some("".to_string());
+            }
             ui.button("Node");
             ui.button("Edge");
         });
     });
+
+    if central_panel.response.context_menu_opened() {
+        napkin.context_menu_open = true;
+    } else {
+        napkin.context_menu_open = false;
+    }
 }

@@ -5,7 +5,7 @@ use bevy_egui::egui::CursorIcon;
 use bevy_egui::EguiContexts;
 use std::{f32::consts::*, fmt};
 
-use crate::OccupiedScreenSpace;
+use crate::{NapkinSettings, OccupiedScreenSpace};
 
 use super::edge_controller::HoveredEdge;
 use super::node_controller::HoveredNode;
@@ -82,6 +82,7 @@ Freecam Controls:
 #[allow(clippy::too_many_arguments)]
 pub fn run_camera_controller(
     time: Res<Time>,
+    napkin: Res<NapkinSettings>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut contexts: EguiContexts,
     mut mouse_events: EventReader<MouseMotion>,
@@ -106,7 +107,7 @@ pub fn run_camera_controller(
 
         let cursor_grab = *mouse_cursor_grab;
 
-        if !controller.enabled && !cursor_grab {
+        if (!controller.enabled && !cursor_grab) || napkin.context_menu_open {
             mouse_events.clear();
             return;
         }

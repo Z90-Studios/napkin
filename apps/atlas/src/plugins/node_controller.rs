@@ -12,7 +12,7 @@ use bevy_rapier2d::{
 };
 use std::fmt;
 
-use crate::{NapkinNode, NapkinSettings};
+use crate::{NapkinNode, NapkinSettings, OccupiedScreenSpace};
 
 use super::camera_controller::CameraController;
 
@@ -58,6 +58,15 @@ impl fmt::Display for NodeController {
             "Node created ( project = {:?}, id = {:?} )",
             self.project, self.id
         )
+    }
+}
+
+impl From<&NodeController> for NapkinNode {
+    fn from(node: &NodeController) -> NapkinNode {
+        NapkinNode {
+            id: node.id.clone(),
+            project: node.project.clone(),
+        }
     }
 }
 
@@ -163,8 +172,24 @@ pub fn handle_drag(
     mut hovered_node: Query<&mut Transform, With<HoveredNode>>,
 ) {}
 
+pub fn handle_click(
+    hovered_nodes: Query<(&HoveredNode, &NodeController)>,
+    camera_controller: Query<&CameraController>,
+    mouse_button_input: Res<ButtonInput<MouseButton>>,
+    mut napkin: ResMut<NapkinSettings>,
+) {
+    for (_, node) in &hovered_nodes {
+        if mouse_button_input.just_pressed(camera_controller.single().mouse_key_cursor_grab) {
+            let selected_node: NapkinNode = node.into();
+            napkin.selected_nodes = Some([selected_node].to_vec())
+        }
+    }
+}
+
 pub fn cast_ray(
     mut commands: Commands,
+    napkin: Res<NapkinSettings>,
+    occupied_screen_space: Res<OccupiedScreenSpace>,
     windows: Query<&Window, With<PrimaryWindow>>,
     rapier_context: Res<RapierContext>,
     cameras: Query<(&Camera, &GlobalTransform)>,
@@ -180,6 +205,25 @@ pub fn cast_ray(
     let Some(cursor_position) = window.cursor_position() else {
         return;
     };
+    let mouse_border_offset = 4.0;
+    if let (Some(cursor_position), window_height, window_width) = (
+        window.cursor_position(),
+        window.height(),
+        window.width(),
+    ) {
+        if cursor_position.x < occupied_screen_space.left + mouse_border_offset
+            || cursor_position.x
+                > (window_width - occupied_screen_space.right - mouse_border_offset)
+            || cursor_position.y
+                > (window_height - occupied_screen_space.bottom - mouse_border_offset)
+            || cursor_position.y < (occupied_screen_space.top + mouse_border_offset)
+        {
+            return;
+        }
+    }
+    if napkin.context_menu_open {
+        return;
+    }
 
     for (camera, camera_transform) in &cameras {
         // Compute ray from mouse position

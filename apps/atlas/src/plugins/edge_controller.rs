@@ -16,7 +16,7 @@ use bevy_rapier2d::{
 };
 use std::{f32::consts::PI, fmt};
 
-use crate::{NapkinEdge, NapkinSettings};
+use crate::{NapkinEdge, NapkinSettings, OccupiedScreenSpace};
 
 use super::{camera_controller::{self, CameraController}, node_controller::NodeController};
 
@@ -150,6 +150,8 @@ fn edge_spawner(
 
 fn cast_ray(
     mut commands: Commands,
+    napkin: Res<NapkinSettings>,
+    occupied_screen_space: Res<OccupiedScreenSpace>,
     windows: Query<&Window, With<PrimaryWindow>>,
     rapier_context: Res<RapierContext>,
     cameras: Query<(&Camera, &GlobalTransform)>,
@@ -165,6 +167,25 @@ fn cast_ray(
     let Some(cursor_position) = window.cursor_position() else {
         return;
     };
+    let mouse_border_offset = 4.0;
+    if let (Some(cursor_position), window_height, window_width) = (
+        window.cursor_position(),
+        window.height(),
+        window.width(),
+    ) {
+        if cursor_position.x < occupied_screen_space.left + mouse_border_offset
+            || cursor_position.x
+                > (window_width - occupied_screen_space.right - mouse_border_offset)
+            || cursor_position.y
+                > (window_height - occupied_screen_space.bottom - mouse_border_offset)
+            || cursor_position.y < (occupied_screen_space.top + mouse_border_offset)
+        {
+            return;
+        }
+    }
+    if napkin.context_menu_open {
+        return;
+    }
 
     for (camera, camera_transform) in &cameras {
         let Some(point) = camera.viewport_to_world_2d(camera_transform, cursor_position) else {
