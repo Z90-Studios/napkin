@@ -16,7 +16,7 @@ pub struct NodeReqObj {
 
 impl Node {
     pub fn to_update_str(&self) -> String {
-        let update = "SET project = $project";
+        let update = "SET project = '$project'";
         let update = update.replace("$project", &self.project.to_string());
 
         update
