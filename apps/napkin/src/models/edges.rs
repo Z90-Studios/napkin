@@ -20,7 +20,7 @@ pub struct EdgeReqObj {
 
 impl Edge {
     pub fn to_update_str(&self) -> String {
-        let update = "SET project = $project, source = $source, target = $target";
+        let update = "SET project = '$project', source = '$source', target = '$target'";
         let update = update.replace("$project", &self.project.to_string());
         let update = update.replace("$source", &self.source.to_string());
         let update = update.replace("$target", &self.target.to_string());
