@@ -1,4 +1,4 @@
-use bevy::{prelude::*, window::{CursorGrabMode, PrimaryWindow}};
+use bevy::{prelude::*, sprite::Mesh2dHandle, window::{CursorGrabMode, PrimaryWindow}};
 use bevy_egui::{
     egui::{self, Color32, CursorIcon},
     EguiContexts,
@@ -31,6 +31,7 @@ impl Plugin for NodeControllerPlugin {
                 handle_click,
                 save_node,
                 apply_response,
+                update_controller,
             )
         );
     }
@@ -132,12 +133,20 @@ fn node_spawner(
         if existing_nodes.iter().all(|existing_node| existing_node.id != node.id) {
             info!("Adding node of ID {}", node.id);
             let start_point = calculate_balanced_start_point(index, total_nodes);
-            let transform = Transform::from_translation(start_point.extend(100.));
+            let transform = Transform::from_translation(start_point.extend(10.));
+
+            let mut mesh = meshes.add(Circle::new(node_size)).into();
+            let mut material = materials.add(ColorMaterial::from(Color::WHITE));
+            if napkin.selected_project.is_some() && Some(node.project.clone()) != napkin.selected_project {
+                mesh = meshes.add(Rectangle::new(10.0, 10.0)).into();
+                material = materials.add(ColorMaterial::from(Color::linear_rgb(0.8, 0.8, 0.8)));
+            }
+
             commands.spawn((
                     bevy::sprite::MaterialMesh2dBundle {
-                        mesh: meshes.add(Circle::new(node_size)).into(),
+                        mesh,
                         transform,
-                        material: materials.add(ColorMaterial::from(Color::WHITE)),
+                        material,
                         ..default()
                     },
                     NodeController {
@@ -237,7 +246,7 @@ pub fn cast_ray(
     rapier_context: Res<RapierContext>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     mut camera_controller_query: Query<&mut CameraController>,
-    mut nodes: Query<(Entity, &mut Handle<ColorMaterial>), With<NodeController>>,
+    mut nodes: Query<(Entity, &NodeController, &mut Handle<ColorMaterial>), With<NodeController>>,
     mut contexts: EguiContexts,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -295,7 +304,7 @@ pub fn cast_ray(
             },
         );
 
-        for (n_entity, color_material) in &mut nodes.iter() {
+        for (n_entity, node, color_material) in &mut nodes.iter() {
             let material = materials.get_mut(color_material).unwrap();
             if entity.is_some() {
                 if n_entity == entity.unwrap() {
@@ -305,7 +314,11 @@ pub fn cast_ray(
                 }
             } else {
                 commands.entity(n_entity).remove::<HoveredNode>();
-                material.color = Color::WHITE;
+                material.color = if napkin.selected_project.is_none() || napkin.selected_project == Some(node.project.clone()) {
+                    Color::WHITE
+                } else {
+                    Color::linear_rgb(0.4, 0.2, 0.2)
+                };
                 camera_controller.enabled = true;
             }
         }
@@ -374,7 +387,7 @@ fn handle_node_physics(
         if velocities[i].length() < 0.05 {
             velocities[i] = Vec3::ZERO;
         }
-        transform.translation += velocities[i];
+        transform.translation += velocities[i].with_z(0.0);
     }
 }
 
@@ -419,6 +432,30 @@ pub fn apply_response(
         }
         if exists == false {
             napkin.nodes.push(node.clone());
+        }
+    }
+}
+
+pub fn update_controller(
+    mut napkin: ResMut<NapkinSettings>,
+    mut nodes: Query<(&mut NodeController, &mut Mesh2dHandle, &mut Handle<ColorMaterial>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    for (mut controller, mut mesh, color_material) in nodes.iter_mut() {
+        let material = materials.get_mut(color_material.into_inner()).unwrap();
+        let node = napkin.nodes.iter().find(|n| n.id == controller.id).unwrap();
+
+        if controller.project == node.project {
+            controller.project = node.project.clone();
+        }
+
+        if napkin.selected_project.is_none() || napkin.selected_project == Some(node.project.clone()) {
+            mesh.0 = meshes.add(Circle::new(6.0)).into();
+            material.color = Color::WHITE;
+        } else {
+            mesh.0 = meshes.add(Rectangle::new(10.0, 10.0)).into();
+            material.color = Color::linear_rgb(0.4, 0.2, 0.2);
         }
     }
 }

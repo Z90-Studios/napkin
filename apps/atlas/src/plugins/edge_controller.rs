@@ -33,6 +33,7 @@ impl Plugin for EdgeControllerPlugin {
                 cast_ray,
                 save_edge,
                 apply_response,
+                update_controller,
         ));
     }
 }
@@ -385,5 +386,25 @@ pub fn apply_response(
         if exists == false {
             napkin.edges.push(edge.clone());
         }
+    }
+}
+
+pub fn update_controller(
+    napkin: Res<NapkinSettings>,
+    mut edges: Query<&mut EdgeController>,
+) {
+    for mut controller in edges.iter_mut() {
+        let edge = napkin.edges.iter().find(|e| e.id == controller.id).unwrap();
+
+        /*if controller.project == edge.project
+            && controller.source == edge.source
+            && controller.target == edge.target
+        {
+            return;
+        } else {*/
+            controller.project = edge.project.clone();
+            controller.source = edge.source.clone();
+            controller.target = edge.target.clone();
+        //}
     }
 }
