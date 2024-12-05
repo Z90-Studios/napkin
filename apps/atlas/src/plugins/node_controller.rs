@@ -106,7 +106,14 @@ fn node_spawner(
     let mut filtered_nodes: Vec<&NapkinNode> = napkin.nodes.iter().collect();
     if let Some(selected_project) = &napkin.selected_project {
         if !selected_project.is_empty() {
-            filtered_nodes.retain(|&node| node.project == *selected_project);
+            let filtered_edges: Vec<String> = napkin.
+                edges
+                .iter()
+                .filter(|e| e.project == selected_project.clone())
+                .flat_map(|e| vec![e.source.clone(), e.target.clone()])
+                .into_iter()
+                .collect();
+            filtered_nodes.retain(|&node| node.project == *selected_project || filtered_edges.contains(&node.id));
         }
     }
     fn calculate_balanced_start_point(index: usize, total_nodes: usize) -> Vec2 {
@@ -154,10 +161,17 @@ pub fn node_destroyer(
 ) {
     if let Some(selected_project) = &napkin.selected_project {
         if !selected_project.is_empty() {
+            let filtered_edges: Vec<String> = napkin.
+                edges
+                .iter()
+                .filter(|e| e.project == selected_project.clone())
+                .flat_map(|e| vec![e.source.clone(), e.target.clone()])
+                .into_iter()
+                .collect();
             let filtered_nodes = napkin
                 .nodes
                 .iter()
-                .filter(|node| node.project == *selected_project)
+                .filter(|node| node.project == *selected_project || filtered_edges.contains(&node.id))
                 .collect::<Vec<_>>();
             for (entity, node) in existing_nodes.iter() {
                 if !filtered_nodes

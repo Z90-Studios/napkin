@@ -5,7 +5,7 @@ use bevy_egui::{
     egui::{self, Color32, CursorIcon},
     EguiContexts,
 };
-use bevy_http_client::prelude::TypedResponse;
+use bevy_http_client::{prelude::{TypedRequest, TypedResponse}, HttpClient};
 use bevy_rapier2d::{
     dynamics::{
         GravityScale, ImpulseJoint, RapierRigidBodyHandle, RigidBody, RopeJointBuilder
@@ -16,7 +16,7 @@ use bevy_rapier2d::{
 };
 use std::{f32::consts::PI, fmt};
 
-use crate::{NapkinEdge, NapkinSettings, OccupiedScreenSpace};
+use crate::{NapkinEdge, NapkinEdits, NapkinSettings, OccupiedScreenSpace};
 
 use super::{camera_controller::{self, CameraController}, node_controller::NodeController};
 
@@ -29,7 +29,10 @@ impl Plugin for EdgeControllerPlugin {
                 edge_spawner,
                 edge_destroyer,
                 handle_edge_physics,
+                handle_click,
                 cast_ray,
+                save_edge,
+                apply_response,
         ));
     }
 }
@@ -145,6 +148,46 @@ fn edge_spawner(
                 ));    
             }
         }
+    }
+}
+
+pub fn handle_click(
+    hovered_edges: Query<(&HoveredEdge, &EdgeController)>,
+    camera_controller: Query<&CameraController>,
+    mouse_button_input: Res<ButtonInput<MouseButton>>,
+    mut napkin: ResMut<NapkinSettings>,
+    occupied_screen_space: Res<OccupiedScreenSpace>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+) {
+    let window = windows.single();
+    let mouse_border_offset = 4.0;
+    if napkin.context_menu_open {
+        return;
+    }
+    if let (Some(cursor_position), window_height, window_width) = (
+        window.cursor_position(),
+        window.height(),
+        window.width(),
+    ) {
+        if cursor_position.x < occupied_screen_space.left + mouse_border_offset
+            || cursor_position.x
+                > (window_width - occupied_screen_space.right - mouse_border_offset)
+            || cursor_position.y
+                > (window_height - occupied_screen_space.bottom - mouse_border_offset)
+            || cursor_position.y < (occupied_screen_space.top + mouse_border_offset)
+        {
+            return;
+        }
+    } else {
+        return;
+    }
+
+    if mouse_button_input.just_pressed(camera_controller.single().mouse_key_cursor_grab) {
+        for (_, edge) in &hovered_edges {
+            napkin.selected_edge = Some(edge.id.clone());
+            return;
+        }
+        napkin.selected_edge = None;
     }
 }
 
@@ -294,6 +337,53 @@ pub fn edge_destroyer(
                     commands.entity(entity).despawn();
                 }
             }
+        }
+    }
+}
+
+pub fn save_edge(
+    mut napkin: ResMut<NapkinSettings>,
+    mut edits: ResMut<NapkinEdits>,
+    mut edge_request: EventWriter<TypedRequest<NapkinEdge>>,
+) {
+    if edits.save_edge {
+        let mut http_client = HttpClient::new();
+        if edits.edge.id.is_empty() {
+            http_client = http_client.post(format!("{}/edge", napkin.server_url));
+        } else {
+            http_client = http_client.put(format!("{}/edge/{}", napkin.server_url, edits.edge.id));
+        }
+        http_client = http_client.json(&edits.edge);
+        edge_request.send(
+            http_client.with_type::<NapkinEdge>(),
+        );
+        edits.save_edge = false;
+    }
+}
+
+pub fn apply_response(
+    mut napkin: ResMut<NapkinSettings>,
+    mut edits: ResMut<NapkinEdits>,
+    mut edge_response: EventReader<TypedResponse<NapkinEdge>>,
+) {
+    for response in edge_response.read() {
+        info!("Received updated edge from server");
+        let edge = NapkinEdge {
+            id: response.id.clone(),
+            project: response.project.clone(),
+            source: response.source.clone(),
+            target: response.target.clone(),
+        };
+        edits.edge = edge.clone();
+        let mut exists = false;
+        for e in napkin.edges.iter_mut() {
+            if e.id == edge.id {
+                exists = true;
+                *e = edge.clone();
+            }
+        }
+        if exists == false {
+            napkin.edges.push(edge.clone());
         }
     }
 }

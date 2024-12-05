@@ -86,6 +86,8 @@ pub struct NapkinEdits {
     save_project: bool,
     node: NapkinNode,
     save_node: bool,
+    edge: NapkinEdge,
+    save_edge: bool,
 }
 
 impl Default for NapkinEdits {
@@ -95,6 +97,8 @@ impl Default for NapkinEdits {
             save_project: false,
             node: NapkinNode::default(),
             save_node: false,
+            edge: NapkinEdge::default(),
+            save_edge: false,
         }
     }
 }
@@ -111,6 +115,7 @@ fn main() {
         .register_request_type::<Vec<NapkinNode>>()
         .register_request_type::<NapkinNode>()
         .register_request_type::<Vec<NapkinEdge>>()
+        .register_request_type::<NapkinEdge>()
         .register_request_type::<Vec<NapkinNodeMetadata>>()
         .register_request_type::<Vec<NapkinEdgeMetadata>>()
         .add_plugins(DefaultPlugins)
@@ -355,7 +360,68 @@ fn setup_ui(
                         });
                     }
                 });
+            ui.separator();;
+            egui::CollapsingHeader::new("Edge Properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    if napkin.selected_edge.is_none() {
+                        ui.label("No edge selected");
+                    } else {
+                        if Some(edits.edge.id.clone()) != napkin.selected_edge {
+                            for e in napkin.edges.iter() {
+                                if napkin.selected_edge == Some(e.id.clone()) {
+                                    edits.edge = e.clone();
+                                }
+                            }
+                        }
+                        let project = napkin.projects.iter().find(|p| p.id == edits.edge.project).unwrap();
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            ui.add(egui::Label::new(egui::RichText::new(
+                                        if edits.edge.id.is_empty() { "New Edge" } else { &edits.edge.id }
+                            ).small()));
+                        });
+                        egui::ComboBox::from_label(
+                            if edits.edge.project.is_empty() {
+                                "Select Project"
+                            } else {
+                                "Change Project"
+                            }
+                        ).selected_text(
+                            if edits.edge.project.is_empty() {
+                                format!("None")
+                            } else {
+                                format!("@{}/{}", project.scope, project.name)
+                            }
+                        ).show_ui(ui, |ui| {
+                            for p in napkin.projects.iter() {
+                                ui.selectable_value(&mut edits.edge.project, p.id.clone(), format!("@{}/{}", p.scope, p.name));
+                            }
+                        });
+                        egui::Grid::new("edge_view")
+                            .num_columns(2)
+                            .spacing([40.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.label("Source Node");
+                                ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.edge.source));
+                                ui.end_row();
+
+                                ui.label("Target Node");
+                                ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.edge.target));
+                                ui.end_row();
+                            });
+
+
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            if ui.button(if edits.edge.id.is_empty() { "Create" } else { "Apply" })
+                                .clicked() {
+                                    edits.save_edge = true;
+                                }
+                        });
+
+                    }
+                });
             ui.separator();
+
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
