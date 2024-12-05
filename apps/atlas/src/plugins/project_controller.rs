@@ -62,10 +62,15 @@ pub fn apply_response(
             name: response.name.clone(),
         };
         edits.project = project.clone();
+        let mut exists = false;
         for p in napkin.projects.iter_mut() {
             if p.id == project.id {
+                exists = true;
                 *p = project.clone();
             }
+        }
+        if exists == false {
+            napkin.projects.push(project.clone());
         }
     }
 }

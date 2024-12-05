@@ -41,17 +41,17 @@ pub struct NapkinSettings {
     initialized: bool,
     uptime: Stopwatch,
     refresh_timer: Timer,
-    selected_project: Option<String>, // Project UUID
     context_menu_open: bool,
     // napkin_crosshair: NapkinCrosshair,
     hovered_nodes: Option<Vec<NapkinNode>>,
-    // hovered_edges: Option<Vec<NapkinEdge>>,
-    selected_nodes: Option<Vec<NapkinNode>>, // Multiple Selection Shift+Click
-    // selected_edges: Option<Vec<String>>,     // Same, but separated for fun
+    hovered_edges: Option<Vec<NapkinEdge>>,
+    selected_project: Option<String>,
+    selected_node: Option<String>,
+    selected_edge: Option<String>,
     nodes: Vec<NapkinNode>,
-    // node_metadata: Vec<NapkinNodeMetadata>,
+    node_metadata: Vec<NapkinNodeMetadata>,
     edges: Vec<NapkinEdge>,
-    // edge_metadata: Vec<NapkinEdgeMetadata>,
+    edge_metadata: Vec<NapkinEdgeMetadata>,
     projects: Vec<NapkinProject>,
     project_search_string: String,
 }
@@ -67,13 +67,13 @@ impl Default for NapkinSettings {
             context_menu_open: false,
             // napkin_crosshair: NapkinCrosshair::default(),
             hovered_nodes: None,
-            // hovered_edges: None,
-            selected_nodes: None,
-            // selected_edges: None,
+            hovered_edges: None,
+            selected_node: None,
+            selected_edge: None,
             nodes: Vec::new(),
-            // node_metadata: Vec::new(),
+            node_metadata: Vec::new(),
             edges: Vec::new(),
-            // edge_metadata: Vec::new(),
+            edge_metadata: Vec::new(),
             projects: Vec::new(),
             project_search_string: String::new(),
         }
@@ -84,6 +84,8 @@ impl Default for NapkinSettings {
 pub struct NapkinEdits {
     project: NapkinProject,
     save_project: bool,
+    node: NapkinNode,
+    save_node: bool,
 }
 
 impl Default for NapkinEdits {
@@ -91,6 +93,8 @@ impl Default for NapkinEdits {
         Self {
             project: NapkinProject::default(),
             save_project: false,
+            node: NapkinNode::default(),
+            save_node: false,
         }
     }
 }
@@ -105,6 +109,7 @@ fn main() {
         .register_request_type::<Vec<NapkinProject>>()
         .register_request_type::<NapkinProject>()
         .register_request_type::<Vec<NapkinNode>>()
+        .register_request_type::<NapkinNode>()
         .register_request_type::<Vec<NapkinEdge>>()
         .register_request_type::<Vec<NapkinNodeMetadata>>()
         .register_request_type::<Vec<NapkinEdgeMetadata>>()
@@ -267,40 +272,89 @@ fn setup_ui(
                     })
                 });
             ui.separator();
-            if napkin.selected_project.is_none() {
-                ui.label("No project selected");
-            } else {
-                if Some(edits.project.id.clone()) != napkin.selected_project {
-                    for p in napkin.projects.iter() {
-                        if napkin.selected_project == Some(p.id.clone()) {
-                            edits.project = p.clone();
+            egui::CollapsingHeader::new("Project Properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    if napkin.selected_project.is_none() {
+                        ui.label("No project selected");
+                    } else {
+                        if Some(edits.project.id.clone()) != napkin.selected_project {
+                            for p in napkin.projects.iter() {
+                                if napkin.selected_project == Some(p.id.clone()) {
+                                    edits.project = p.clone();
+                                }
+                            }
                         }
-                    }
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(
-                                if edits.project.id.is_empty() { "New Project" } else { &edits.project.id }
-                    ).small()));
-                });
-                egui::Grid::new("project_view")
-                    .num_columns(2)
-                    .spacing([40.0, 4.0])
-                    .show(ui, |ui| {
-                        ui.label("Scope");
-                        ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.project.scope));
-                        ui.end_row();
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            ui.add(egui::Label::new(egui::RichText::new(
+                                        if edits.project.id.is_empty() { "New Project" } else { &edits.project.id }
+                            ).small()));
+                        });
+                        egui::Grid::new("project_view")
+                            .num_columns(2)
+                            .spacing([40.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.label("Scope");
+                                ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.project.scope));
+                                ui.end_row();
 
-                        ui.label("Name");
-                        ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.project.name));
-                        ui.end_row();
-                    });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                    if ui.button(if edits.project.id.is_empty() { "Create" } else { "Apply" })
-                        .clicked() {
-                            edits.save_project = true;
-                        }
+                                ui.label("Name");
+                                ui.add_sized(ui.available_size(), egui::TextEdit::singleline(&mut edits.project.name));
+                                ui.end_row();
+                            });
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            if ui.button(if edits.project.id.is_empty() { "Create" } else { "Apply" })
+                                .clicked() {
+                                    edits.save_project = true;
+                                }
+                        });
+                    }
                 });
-            }
+            ui.separator();
+            egui::CollapsingHeader::new("Node Properties")
+                .default_open(true)
+                .show(ui, |ui| {
+                    if napkin.selected_node.is_none() {
+                        ui.label("No node selected");
+                    } else {
+                        if Some(edits.node.id.clone()) != napkin.selected_node {
+                            for n in napkin.nodes.iter() {
+                                if napkin.selected_node == Some(n.id.clone()) {
+                                    edits.node = n.clone();
+                                }
+                            }
+                        }
+                        let project = napkin.projects.iter().find(|p| p.id == edits.node.project).unwrap();
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            ui.add(egui::Label::new(egui::RichText::new(
+                                        if edits.node.id.is_empty() { "New Node" } else { &edits.node.id }
+                            ).small()));
+                        });
+                        egui::ComboBox::from_label(
+                            if edits.node.project.is_empty() {
+                                "Select Project"
+                            } else {
+                                "Change Project"
+                            }
+                        ).selected_text(
+                            if edits.node.project.is_empty() {
+                                format!("None")
+                            } else {
+                                format!("@{}/{}", project.scope, project.name)
+                            }
+                        ).show_ui(ui, |ui| {
+                            for p in napkin.projects.iter() {
+                                ui.selectable_value(&mut edits.node.project, p.id.clone(), format!("@{}/{}", p.scope, p.name));
+                            }
+                        });
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            if ui.button(if edits.node.id.is_empty() { "Create" } else { "Apply" })
+                                .clicked() {
+                                    edits.save_node = true;
+                                }
+                        });
+                    }
+                });
             ui.separator();
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })

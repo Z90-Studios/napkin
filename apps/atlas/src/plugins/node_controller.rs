@@ -3,7 +3,7 @@ use bevy_egui::{
     egui::{self, Color32, CursorIcon},
     EguiContexts,
 };
-use bevy_http_client::prelude::TypedResponse;
+use bevy_http_client::{prelude::{TypedRequest, TypedResponse}, HttpClient};
 use bevy_rapier2d::{
     dynamics::{GravityScale, RigidBody},
     geometry::{Collider, CollisionGroups, Group, SolverGroups},
@@ -12,7 +12,7 @@ use bevy_rapier2d::{
 };
 use std::fmt;
 
-use crate::{NapkinNode, NapkinSettings, OccupiedScreenSpace};
+use crate::{NapkinEdits, NapkinNode, NapkinSettings, OccupiedScreenSpace};
 
 use super::camera_controller::CameraController;
 
@@ -28,6 +28,9 @@ impl Plugin for NodeControllerPlugin {
                 node_destroyer,
                 cast_ray,
                 handle_node_physics,
+                handle_click,
+                save_node,
+                apply_response,
             )
         );
     }
@@ -78,14 +81,14 @@ fn run_node_controller(
         Query<(&mut HoveredNode, &NodeController), Without<Camera>>,
     )>,
 ) {
-    let mut new_selected_nodes: Vec<NapkinNode> = Vec::new();
+    let mut new_hovered_nodes: Vec<NapkinNode> = Vec::new();
     for (_, node_controller) in node_set.p1().iter_mut() {
-        new_selected_nodes.push(NapkinNode {
+        new_hovered_nodes.push(NapkinNode {
             project: node_controller.project.clone(),
             id: node_controller.id.clone(),
         });
     }
-    napkin.hovered_nodes = Some(new_selected_nodes);
+    napkin.hovered_nodes = Some(new_hovered_nodes);
 }
 
 fn node_spawner(
@@ -177,12 +180,38 @@ pub fn handle_click(
     camera_controller: Query<&CameraController>,
     mouse_button_input: Res<ButtonInput<MouseButton>>,
     mut napkin: ResMut<NapkinSettings>,
+    occupied_screen_space: Res<OccupiedScreenSpace>,
+    windows: Query<&Window, With<PrimaryWindow>>,
 ) {
-    for (_, node) in &hovered_nodes {
-        if mouse_button_input.just_pressed(camera_controller.single().mouse_key_cursor_grab) {
-            let selected_node: NapkinNode = node.into();
-            napkin.selected_nodes = Some([selected_node].to_vec())
+    let window = windows.single();
+    let mouse_border_offset = 4.0;
+    if napkin.context_menu_open {
+        return;
+    }
+    if let (Some(cursor_position), window_height, window_width) = (
+        window.cursor_position(),
+        window.height(),
+        window.width(),
+    ) {
+        if cursor_position.x < occupied_screen_space.left + mouse_border_offset
+            || cursor_position.x
+                > (window_width - occupied_screen_space.right - mouse_border_offset)
+            || cursor_position.y
+                > (window_height - occupied_screen_space.bottom - mouse_border_offset)
+            || cursor_position.y < (occupied_screen_space.top + mouse_border_offset)
+        {
+            return;
         }
+    } else {
+        return;
+    }
+
+    if mouse_button_input.just_pressed(camera_controller.single().mouse_key_cursor_grab) {
+        for (_, node) in &hovered_nodes {
+            napkin.selected_node = Some(node.id.clone());
+            return;
+        }
+        napkin.selected_node = None;
     }
 }
 
@@ -332,5 +361,50 @@ fn handle_node_physics(
             velocities[i] = Vec3::ZERO;
         }
         transform.translation += velocities[i];
+    }
+}
+
+pub fn save_node(
+    mut napkin: ResMut<NapkinSettings>,
+    mut edits: ResMut<NapkinEdits>,
+    mut node_request: EventWriter<TypedRequest<NapkinNode>>,
+) {
+    if edits.save_node {
+        let mut http_client = HttpClient::new();
+        if edits.node.id.is_empty() {
+            http_client = http_client.post(format!("{}/node", napkin.server_url));
+        } else {
+            http_client = http_client.put(format!("{}/node/{}", napkin.server_url, edits.node.id));
+        }
+        http_client = http_client.json(&edits.node);
+        node_request.send(
+            http_client.with_type::<NapkinNode>(),
+        );
+        edits.save_node = false;
+    }
+}
+
+pub fn apply_response(
+    mut napkin: ResMut<NapkinSettings>,
+    mut edits: ResMut<NapkinEdits>,
+    mut node_response: EventReader<TypedResponse<NapkinNode>>,
+) {
+    for response in node_response.read() {
+        info!("Received updated node from server");
+        let node = NapkinNode {
+            id: response.id.clone(),
+            project: response.project.clone(),
+        };
+        edits.node = node.clone();
+        let mut exists = false;
+        for n in napkin.nodes.iter_mut() {
+            if n.id == node.id {
+                exists = true;
+                *n = node.clone();
+            }
+        }
+        if exists == false {
+            napkin.nodes.push(node.clone());
+        }
     }
 }
