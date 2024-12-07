@@ -11,6 +11,7 @@ use bevy_rapier2d::{
     plugin::RapierContext,
 };
 use std::fmt;
+use kdtree::KdTree;
 
 use crate::{NapkinEdits, NapkinNode, NapkinSettings, OccupiedScreenSpace};
 
@@ -119,7 +120,7 @@ fn node_spawner(
     }
     fn calculate_balanced_start_point(index: usize, total_nodes: usize) -> Vec2 {
         let angle = 2.0 * std::f32::consts::PI * (index as f32) / (total_nodes as f32);
-        let radius = total_nodes as f32 * 30.0;
+        let radius = total_nodes as f32;
         Vec2::new(
             radius * angle.cos(),
             radius * angle.sin(),
@@ -344,51 +345,114 @@ fn handle_node_physics(
     time: Res<Time>,
     napkin: Res<NapkinSettings>,
 ) {
-    let center = Vec3::ZERO; // Define center (vec3 for transforms)
+    let k: f32 = 0.5;
+    let k_sqr = k * k;
     let nodes = query
         .iter_mut()
         .map(|(transform, node_controller)| (transform.translation, node_controller))
         .collect::<Vec<_>>();
+    let area = (nodes.len() as f32).sqrt() * (30.0 * 30.0);
+    let temp = k_sqr / area;
+    if temp == 1.0 {
+        return;
+    }
+    let mut kdtree = KdTree::new(2);
+    for i in 0..nodes.len() {
+        let node_position = [nodes[i].0.x, nodes[i].0.y];
+        kdtree.add(node_position, i).unwrap();
+    }
     let mut velocities = vec![Vec3::ZERO; nodes.len()];
-
     let delta_time = time.delta_seconds();
 
     for i in 0..nodes.len() {
         let node_position = nodes[i].0;
-        // Attraction to center
-        let center_direction = center - node_position;
-        let center_distance = center_direction.length();
-        if center_distance > 0.0 {
-            let center_force_magnitude = center_distance * 0.4;
-            velocities[i] += center_direction.normalize() * center_force_magnitude * delta_time;
-        }
-
-        // Repulsion between nodes
         for j in 0..nodes.len() {
             if i != j {
-                let direction = node_position - nodes[j].0;
-                let distance = direction.length();
-                let connected = napkin.edges.iter().any(|edge|
-                    (edge.source == nodes[i].1.id && edge.target == nodes[j].1.id) ||
-                    (edge.source == nodes[i].1.id && edge.source == nodes[j].1.id)
-                );
-                let repulsion_factor = if connected { 500.0 } else { 1000.0 };
-                // Repulsive force inverse to distance
-                let force_magnitude = repulsion_factor / distance.max(50.0);
-                velocities[i] += direction.normalize() * force_magnitude * delta_time;    
+                let distance_squared = (node_position - nodes[j].0).length_squared();
+                let repulsion = temp / distance_squared;
+                let dx = node_position.x - nodes[j].0.x;
+                let dy = node_position.y - nodes[j].0.y;
+                let angle = (dx * dx + dy * dy).sqrt().atan2(dy);
+
+                velocities[i].x += repulsion * angle.cos();
+                velocities[i].y += repulsion * angle.sin();
             }
         }
     }
 
-    // Update positions and apply damping to simulate friction
-    let damping_factor = 1.2;
-    for (i, (mut transform, _)) in query.iter_mut().enumerate() {
-        velocities[i] *= damping_factor;
-        if velocities[i].length() < 0.05 {
-            velocities[i] = Vec3::ZERO;
+    for i in 0..nodes.len() {
+        let mut center = Vec2::ZERO;
+        let mut neighbor_count = 0;
+        let node_position = [nodes[i].0.x, nodes[i].0.y];
+        if let Some(neighbors) = kdtree.within(&node_position, 1000.0, &kdtree::distance::squared_euclidean).ok() {
+            for neighbor in neighbors {
+                if *neighbor.1 != i {
+                    neighbor_count += 1;
+                    center.x += nodes[*neighbor.1].0.x;
+                    center.y += nodes[*neighbor.1].0.y;
+                }
+            }
         }
-        transform.translation += velocities[i].with_z(0.0);
+
+        if neighbor_count > 0 {
+            center.x /= neighbor_count as f32;
+            center.y /= neighbor_count as f32;
+            let attraction = (center.x - nodes[i].0.x, center.y - nodes[i].0.y);
+            velocities[i].x -= attraction.0;
+            velocities[i].y -= attraction.1;
+        }
     }
+
+    for i in 0..nodes.len() {
+        let speed = (velocities[i].x * velocities[i].x + velocities[i].y * velocities[i].y).sqrt();
+        if speed > area {
+            let ratio = area / speed;
+            velocities[i].x *= ratio;
+            velocities[i].y *= ratio;
+        }
+    }
+
+    for (i, (mut transform, _)) in query.iter_mut().enumerate() {
+        transform.translation += velocities[i].with_z(0.0) * delta_time;
+    }
+
+
+    // for i in 0..nodes.len() {
+    //     let node_position = nodes[i].0;
+    //     // Attraction to center
+    //     let center_direction = center - node_position;
+    //     let center_distance = center_direction.length();
+    //     if center_distance > 0.0 {
+    //         let center_force_magnitude = center_distance * 0.4;
+    //         velocities[i] += center_direction.normalize() * center_force_magnitude * delta_time;
+    //     }
+
+    //     // Repulsion between nodes
+    //     for j in 0..nodes.len() {
+    //         if i != j {
+    //             let direction = node_position - nodes[j].0;
+    //             let distance = direction.length();
+    //             let connected = napkin.edges.iter().any(|edge|
+    //                 (edge.source == nodes[i].1.id && edge.target == nodes[j].1.id) ||
+    //                 (edge.source == nodes[i].1.id && edge.source == nodes[j].1.id)
+    //             );
+    //             let repulsion_factor = if connected { 500.0 } else { 1000.0 };
+    //             // Repulsive force inverse to distance
+    //             let force_magnitude = repulsion_factor / distance.max(50.0);
+    //             velocities[i] += direction.normalize() * force_magnitude * delta_time;    
+    //         }
+    //     }
+    // }
+
+    // Update positions and apply damping to simulate friction
+    // let damping_factor = 1.2;
+    // for (i, (mut transform, _)) in query.iter_mut().enumerate() {
+    //     velocities[i] *= damping_factor;
+    //     if velocities[i].length() < 0.05 {
+    //         velocities[i] = Vec3::ZERO;
+    //     }
+    //     transform.translation += velocities[i].with_z(0.0);
+    // }
 }
 
 pub fn save_node(
@@ -442,20 +506,20 @@ pub fn update_controller(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    for (mut controller, mut mesh, color_material) in nodes.iter_mut() {
-        let material = materials.get_mut(color_material.into_inner()).unwrap();
-        let node = napkin.nodes.iter().find(|n| n.id == controller.id).unwrap();
+    // for (mut controller, mut mesh, color_material) in nodes.iter_mut() {
+    //     let material = materials.get_mut(color_material.into_inner()).unwrap();
+    //     let node = napkin.nodes.iter().find(|n| n.id == controller.id).unwrap();
 
-        if controller.project == node.project {
-            controller.project = node.project.clone();
-        }
+    //     if controller.project == node.project {
+    //         controller.project = node.project.clone();
+    //     }
 
-        if napkin.selected_project.is_none() || napkin.selected_project == Some(node.project.clone()) {
-            mesh.0 = meshes.add(Circle::new(6.0)).into();
-            material.color = Color::WHITE;
-        } else {
-            mesh.0 = meshes.add(Rectangle::new(10.0, 10.0)).into();
-            material.color = Color::linear_rgb(0.4, 0.2, 0.2);
-        }
-    }
+    //     if napkin.selected_project.is_none() || napkin.selected_project == Some(node.project.clone()) {
+    //         mesh.0 = meshes.add(Circle::new(6.0)).into();
+    //         material.color = Color::WHITE;
+    //     } else {
+    //         mesh.0 = meshes.add(Rectangle::new(10.0, 10.0)).into();
+    //         material.color = Color::linear_rgb(0.4, 0.2, 0.2);
+    //     }
+    // }
 }
