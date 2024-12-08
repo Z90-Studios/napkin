@@ -1,16 +1,18 @@
 use std::time::Duration;
 
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::sprite::Material2d;
 use bevy::time::Stopwatch;
 use bevy::{prelude::*, window::CursorGrabMode};
 use bevy::window::PrimaryWindow;
-use bevy_egui::egui::Color32;
+use bevy_egui::egui::{Color32, Vec2b};
 use bevy_egui::{
     egui,
     egui::CursorIcon,
     EguiContexts,
     EguiPlugin,
 };
+use egui_plot::{Line, Plot};
 use bevy_rapier2d::prelude::*;
 use bevy_http_client::prelude::*;
 
@@ -45,6 +47,7 @@ pub struct NapkinSettings {
     uptime: Stopwatch,
     refresh_timer: Timer,
     context_menu_open: bool,
+    fps_log: Vec<(f64, f64)>,
     // napkin_crosshair: NapkinCrosshair,
     hovered_nodes: Option<Vec<NapkinNode>>,
     hovered_edges: Option<Vec<NapkinEdge>>,
@@ -70,6 +73,7 @@ impl Default for NapkinSettings {
             refresh_timer: Timer::new(Duration::from_secs(60), TimerMode::Repeating),
             selected_project: None,
             context_menu_open: false,
+            fps_log: Vec::new(),
             // napkin_crosshair: NapkinCrosshair::default(),
             hovered_nodes: None,
             hovered_edges: None,
@@ -149,6 +153,7 @@ fn main() {
             EdgeControllerPlugin,
             EdgeMetadataControllerPlugin,
             CameraControllerPlugin,
+            FrameTimeDiagnosticsPlugin,
         ))
         // Systems that create Egui widgets should be run during the `CoreSet::Update` set,
         // or after the `EguiSet::BeginPass` system (which belongs to the `CoreSet::PreUpdate` set).
@@ -203,6 +208,32 @@ impl From<NapkinEdgeMetadata> for EditableMetadata {
     }
 }
 
+
+fn lerp_color(start: egui::Color32, end: egui::Color32, _t: f64) -> egui::Color32 {
+    let t = _t as f32;
+    let start_alpha = start.a() as f32 / 255.0;
+    let end_alpha = end.a() as f32 / 255.0;
+    let alpha = (1.0 - t) * start_alpha + t * end_alpha;
+    let alpha = alpha.clamp(0.0, 1.0) * 255.0;
+
+    let start_red = start.r() as f32 / 255.0;
+    let end_red = end.r() as f32 / 255.0;
+    let red = (1.0 - t) * start_red + t * end_red;
+    let red = (red.clamp(0.0, 1.0) * 255.0) as u8;
+
+    let start_green = start.g() as f32 / 255.0;
+    let end_green = end.g() as f32 / 255.0;
+    let green = (1.0 - t) * start_green + t * end_green;
+    let green = (green.clamp(0.0, 1.0) * 255.0) as u8;
+
+    let start_blue = start.b() as f32 / 255.0;
+    let end_blue = end.b() as f32 / 255.0;
+    let blue = (1.0 - t) * start_blue + t * end_blue;
+    let blue = (blue.clamp(0.0, 1.0) * 255.0) as u8;
+
+    egui::Color32::from_rgba_premultiplied(red, green, blue, alpha as u8)
+}
+
 fn setup_ui(
     mut contexts: EguiContexts,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -211,11 +242,12 @@ fn setup_ui(
     mut napkin: ResMut<NapkinSettings>,
     mut edits: ResMut<NapkinEdits>,
     mut debug_state: ResMut<DebugState>,
+    diagnostics: Res<DiagnosticsStore>,
 ) {
     let ctx = contexts.ctx_mut();
 
     let atlas_panel_frame = egui::Frame {
-        fill: egui::Color32::from_black_alpha((255. * 0.9) as u8),
+        fill: egui::Color32::from_black_alpha((255. * 0.99) as u8),
         inner_margin: egui::Margin {
             left: 4.,
             right: 4.,
@@ -225,7 +257,7 @@ fn setup_ui(
         ..egui::Frame::none()
     };
     let atlas_window_frame = egui::Frame {
-        fill: egui::Color32::from_black_alpha((255. * 0.9) as u8),
+        fill: egui::Color32::from_black_alpha((255. * 0.99) as u8),
         inner_margin: egui::Margin {
             left: 4.,
             right: 4.,
@@ -237,6 +269,7 @@ fn setup_ui(
     };
 
     let metadata_editor = egui::Window::new("Metadata Editor")
+        .frame(atlas_window_frame)
         .open(&mut (napkin.selected_node_metadata.is_some() || napkin.selected_edge_metadata.is_some()))
         .default_height(500.0)
         .show(ctx, |ui| {
@@ -537,6 +570,63 @@ fn setup_ui(
                 });
             ui.separator();
 
+            let mut fps_data = Vec::new();
+            for (uptime_at, value) in napkin.fps_log.iter() {
+                fps_data.push([*uptime_at, { *value }]);
+            }
+            let line = Line::new(fps_data);
+            let line_color =
+                if let Some((_last_uptime, last_fps)) = napkin.fps_log.last() {
+                    // Replace the lerp calls in your code with:
+                    
+                    if *last_fps > 60.0 * 0.9 {
+                        lerp_color(
+                            egui::Color32::GREEN,
+                            egui::Color32::YELLOW,
+                            (60.0 - *last_fps) / (60.0 * 0.2),
+                        )
+                    } else if *last_fps > 60.0 * 0.7 {
+                        lerp_color(
+                            egui::Color32::YELLOW,
+                            egui::Color32::RED,
+                            (60.0 * 0.9 - *last_fps) / (60.0 * 0.2),
+                        )
+                    } else {
+                        egui::Color32::RED
+                    }
+                } else {
+                    egui::Color32::GRAY // Default color if no fps data is available
+                };
+            let line = line.color(line_color);
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                ui.vertical(|ui| {
+                    if let Some(value) = diagnostics
+                        .get(&FrameTimeDiagnosticsPlugin::FPS)
+                        .and_then(|fps| fps.smoothed())
+                    {
+                        let uptime = napkin.uptime.elapsed_secs_f64();
+                        napkin.fps_log.push((uptime, value));
+                        if napkin.fps_log.len() > 500 {
+                            napkin.fps_log.drain(0..1); // Clear out the oldest entries
+                        }
+                        ui.label(format!("{:.2}", value));
+                    } else {
+                        ui.label("N/A");
+                    }
+                    Plot::new("fps_log")
+                        .view_aspect(3.0)
+                        .show_axes(Vec2b { x: false, y: false })
+                        .label_formatter(|name, value| {
+                            if !name.is_empty() {
+                                format!("{}: {:.*}", name, 1, value.y)
+                            } else {
+                                format!("Uptime {:.3}\n{:.2} FPS", value.x, value.y)
+                            }
+                        })
+                        .show(ui, |plot_ui| plot_ui.line(line));
+                });
+                ui.add_space(ui.available_height());
+            });
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response

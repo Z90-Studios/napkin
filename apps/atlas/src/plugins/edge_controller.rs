@@ -73,9 +73,46 @@ impl fmt::Display for EdgeController {
 }
 
 fn run_edge_controller(
-    mut _napkin: ResMut<NapkinSettings>,
+    napkin: ResMut<NapkinSettings>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    edges: Query<(Entity, &mut EdgeController, &mut Handle<ColorMaterial>, Option<&HoveredEdge>)>,
+    mut contexts: EguiContexts,
 ) {
+    let ctx = contexts.ctx_mut();
     
+    let selected_node = napkin.selected_edge.clone().unwrap_or("".to_string());
+    for (_, edge_controller, color_material, hovered) in &mut edges.iter() {
+        let selected = selected_node == edge_controller.id;
+        let material = materials.get_mut(color_material).unwrap();
+        let color = if selected {
+            Color::linear_rgb(
+                64.0 / 255.0,
+                182.0 / 255.0,
+                60.0 / 255.0
+            )
+        } else {
+            Color::WHITE
+        };
+        let highlight_color = if selected {
+            Color::linear_rgb(
+                65.0 / 255.0,
+                159.0 / 255.0,
+                153.0 / 255.0
+            )
+        } else {
+            Color::linear_rgb(
+                66.0 / 255.0,
+                135.0 / 255.0,
+                245.0 / 255.0
+            )
+        };
+        if hovered.is_some() {
+            ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
+            material.color = highlight_color;
+        } else {
+            material.color = color;
+        }
+    }
 }
 
 fn edge_spawner(
@@ -199,11 +236,8 @@ fn cast_ray(
     rapier_context: Res<RapierContext>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     mut camera_controller_query: Query<&mut CameraController>,
-    mut edges: Query<(Entity, &mut Handle<ColorMaterial>), With<EdgeController>>,
-    mut contexts: EguiContexts,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    hovered_edges: Query<Entity, With<HoveredEdge>>,
 ) {
-    let ctx = contexts.ctx_mut();
     let window = windows.single();
     let mut camera_controller = camera_controller_query.get_single_mut().unwrap();
 
@@ -243,7 +277,7 @@ fn cast_ray(
         rapier_context.intersections_with_point(
             point,
             QueryFilter::new().groups(CollisionGroups::new(Group::GROUP_3, Group::GROUP_13)),
-            |e| {
+            |_| {
                 node_match = true;
 
                 true
@@ -258,29 +292,28 @@ fn cast_ray(
                 QueryFilter::new().groups(CollisionGroups::new(Group::GROUP_4, Group::GROUP_14)),
                 |e| {
                     entity = Some(e);
-                    camera_controller.enabled = false;
     
                     true
                 },
             );
         }
 
+
         if let Some(e) = entity {
+            camera_controller.enabled = false;
+            for entity in hovered_edges.iter() {
+                if entity != e {
+                    commands.entity(entity).remove::<HoveredEdge>();
+                }
+            }
             commands.entity(e).insert(HoveredEdge);
+        } else {
+            for entity in hovered_edges.iter() {
+                commands.entity(entity).remove::<HoveredEdge>();
+            }
+            return;
         }
 
-        for (n_entity, color_material) in &mut edges.iter() {
-            let material = materials.get_mut(color_material).unwrap();
-            if entity.is_some() {
-                if n_entity == entity.unwrap() {
-                    ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
-                    material.color = Color::linear_rgb(66.0 / 255.0, 135.0 / 255.0, 245.0 / 255.0);
-                }
-            } else {
-                commands.entity(n_entity).remove::<HoveredEdge>();
-                material.color = Color::WHITE;
-            }
-        }
     }
 }
 

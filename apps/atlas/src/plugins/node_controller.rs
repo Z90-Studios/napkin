@@ -76,21 +76,45 @@ impl From<&NodeController> for NapkinNode {
 }
 
 fn run_node_controller(
-    mut napkin: ResMut<NapkinSettings>,
-    _time: Res<Time>,
-    mut node_set: ParamSet<(
-        Query<(&GlobalTransform, &mut Transform, &mut NodeController), Without<Camera>>,
-        Query<(&mut HoveredNode, &NodeController), Without<Camera>>,
-    )>,
+    napkin: ResMut<NapkinSettings>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    nodes: Query<(Entity, &mut NodeController, &mut Handle<ColorMaterial>, Option<&HoveredNode>), With<NodeController>>,
+    mut contexts: EguiContexts,
 ) {
-    let mut new_hovered_nodes: Vec<NapkinNode> = Vec::new();
-    for (_, node_controller) in node_set.p1().iter_mut() {
-        new_hovered_nodes.push(NapkinNode {
-            project: node_controller.project.clone(),
-            id: node_controller.id.clone(),
-        });
+    let ctx = contexts.ctx_mut();
+    let selected_node = napkin.selected_node.clone().unwrap_or("".to_string());
+    for (_, node_controller, color_material, hovered) in &mut nodes.iter() {
+        let selected = selected_node == node_controller.id;
+        let material = materials.get_mut(color_material).unwrap();
+        let color = if selected {
+            Color::linear_rgb(
+                64.0 / 255.0,
+                182.0 / 255.0,
+                60.0 / 255.0
+            )
+        } else {
+            Color::WHITE
+        };
+        let highlight_color = if selected {
+            Color::linear_rgb(
+                65.0 / 255.0,
+                159.0 / 255.0,
+                153.0 / 255.0
+            )
+        } else {
+            Color::linear_rgb(
+                66.0 / 255.0,
+                135.0 / 255.0,
+                245.0 / 255.0
+            )
+        };
+        if hovered.is_some() {
+            ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
+            material.color = highlight_color;
+        } else {
+            material.color = color;
+        }
     }
-    napkin.hovered_nodes = Some(new_hovered_nodes);
 }
 
 fn node_spawner(
@@ -258,6 +282,7 @@ pub fn cast_ray(
     cameras: Query<(&Camera, &GlobalTransform)>,
     mut camera_controller_query: Query<&mut CameraController>,
     mut nodes: Query<(Entity, &NodeController, &mut Handle<ColorMaterial>), With<NodeController>>,
+    hovered_nodes: Query<Entity, With<HoveredNode>>,
     mut contexts: EguiContexts,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
@@ -307,48 +332,26 @@ pub fn cast_ray(
             |e| {
                 // Callback called on each collider hit by the ray.
                 entity = Some(e);
-                camera_controller.enabled = false;
-                // if nodes.contains(entity) {
 
                 true // Return `false` instead if we want to stop searching for other hits.
             },
         );
 
         if let Some(e) = entity {
-            commands.entity(e).insert(HoveredNode);
-        }
-
-        for (n_entity, node, color_material) in &mut nodes.iter() {
-            let material = materials.get_mut(color_material).unwrap();
-            if entity.is_some() {
-                if n_entity == entity.unwrap() {
-                    // TODO: Move to a CursorIconController
-                    ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
-                    material.color = Color::linear_rgb(66.0 / 255.0, 135.0 / 255.0, 245.0 / 255.0);
+            camera_controller.enabled = false;
+            for entity in hovered_nodes.iter() {
+                if entity != e {
+                    commands.entity(entity).remove::<HoveredNode>();
                 }
-            } else {
-                commands.entity(n_entity).remove::<HoveredNode>();
-                material.color = if napkin.selected_project.is_none() || napkin.selected_project == Some(node.project.clone()) {
-                    Color::WHITE
-                } else {
-                    Color::linear_rgb(0.4, 0.2, 0.2)
-                };
             }
+            commands.entity(e).insert(HoveredNode);
+        } else {
+            for entity in hovered_nodes.iter() {
+                commands.entity(entity).remove::<HoveredNode>();
+            }
+            return;
         }
-        // if let Some((entity, _toi)) = hit {
-        //     commands.entity(entity).insert(HoveredNode);
-        //     ctx.output_mut(|o| o.cursor_icon = CursorIcon::PointingHand);
-        // }
 
-        // for entity in existing_hover.iter() {
-        //     if let Some((hit_entity, _)) = hit {
-        //         if entity != hit_entity {
-        //             commands.entity(entity).remove::<HoveredNode>();
-        //         }
-        //     } else {
-        //         commands.entity(entity).remove::<HoveredNode>();
-        //     }
-        // }
     }
 }
 
