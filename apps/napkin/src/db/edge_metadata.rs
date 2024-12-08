@@ -140,7 +140,6 @@ pub async fn update_edge_metadata(
     let _stmt = _stmt.replace("$owner_id", owner_id);
     let _stmt = _stmt.replace("$name", name);
     let _stmt = _stmt.replace("$updates", &EdgeMetadata::to_update_str(&edge_metadata_info));
-    info!("{}", _stmt);
     let stmt = client.prepare(&_stmt).await.unwrap();
     println!("{}", &_stmt);
 

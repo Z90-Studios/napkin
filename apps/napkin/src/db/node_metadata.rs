@@ -134,9 +134,8 @@ pub async fn update_node_metadata(
     name: &String,
     node_metadata_info: NodeMetadata,
 ) -> Result<NodeMetadata, NapkinError> {
-    let _stmt = "UPDATE node_metadata $updates WHERE id = ANY ('{$owner_id}', '{$name}') RETURNING $node_metadata_fields;";
+    let _stmt = "UPDATE node_metadata $updates WHERE (owner_id = '$owner_id' AND name = '$name') RETURNING $node_metadata_fields;";
     let _stmt = _stmt.replace("$node_metadata_fields", &NodeMetadata::sql_table_fields());
-    let _stmt = _stmt.replace("owner_id", "owner_id::text");
     let _stmt = _stmt.replace("$owner_id", owner_id);
     let _stmt = _stmt.replace("$name", name);
     let _stmt = _stmt.replace("$updates", &NodeMetadata::to_update_str(&node_metadata_info));
@@ -152,7 +151,7 @@ pub async fn update_node_metadata(
         .pop()
         .ok_or(NapkinError {
             code: "NODE_METADATA_NO_ID",
-            message: "Node Metadata with ID ({owner_id}, {name}) Not Found",
+            message: "Node Metadata with ID (`{owner_id}`, `{name}`) Not Found",
             root: NapkinErrorRoot::NotFound,
         })
 }
