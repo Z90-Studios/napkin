@@ -14,7 +14,10 @@ pub struct CameraControllerPlugin;
 
 impl Plugin for CameraControllerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, run_camera_controller);
+        app.add_systems(Update, (
+            run_camera_controller,
+            unhovered_check,
+        ));
     }
 }
 
@@ -92,8 +95,6 @@ pub fn run_camera_controller(
     key_input: Res<ButtonInput<KeyCode>>,
     mut mouse_cursor_grab: Local<bool>,
     mut query: Query<(&mut Transform, &mut CameraController, &mut OrthographicProjection), With<Camera>>,
-    hovered_nodes: Query<&mut HoveredNode, Without<Camera>>,
-    hovered_edges: Query<&mut HoveredEdge, Without<Camera>>,
 ) {
     let ctx = contexts.ctx_mut();
     let mut primary_window = windows.single_mut();
@@ -227,6 +228,20 @@ pub fn run_camera_controller(
         if mouse_delta != Vec2::ZERO {
             transform.translation.y += mouse_delta.y * controller.sensitivity;
             transform.translation.x -= mouse_delta.x * controller.sensitivity;
+        }
+    }
+}
+
+fn unhovered_check(
+    mut camera_controller_query: Query<&mut CameraController>,
+    hovered_nodes: Query<&HoveredNode, Without<Camera>>,
+    hovered_edges: Query<&HoveredEdge, Without<Camera>>,
+) {
+    let mut camera_controller = camera_controller_query.single_mut();
+
+    if !camera_controller.enabled {
+        if hovered_nodes.is_empty() && hovered_edges.is_empty() {
+            camera_controller.enabled = true;
         }
     }
 }

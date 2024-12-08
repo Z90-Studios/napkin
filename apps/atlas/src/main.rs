@@ -18,6 +18,8 @@ mod types;
 mod plugins;
 
 use plugins::edge_controller::EdgeControllerPlugin;
+use plugins::edge_metadata_controller::EdgeMetadataControllerPlugin;
+use plugins::node_metadata_controller::NodeMetadataControllerPlugin;
 use plugins::project_controller::ProjectControllerPlugin;
 use plugins::{
     debug_controller::{DebugState, DebugControllerPlugin},
@@ -117,7 +119,9 @@ fn main() {
         .register_request_type::<Vec<NapkinEdge>>()
         .register_request_type::<NapkinEdge>()
         .register_request_type::<Vec<NapkinNodeMetadata>>()
+        .register_request_type::<NapkinNodeMetadata>()
         .register_request_type::<Vec<NapkinEdgeMetadata>>()
+        .register_request_type::<NapkinEdgeMetadata>()
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(50.0))
@@ -128,7 +132,9 @@ fn main() {
             NapkinPlugin,
             ProjectControllerPlugin,
             NodeControllerPlugin,
+            NodeMetadataControllerPlugin,
             EdgeControllerPlugin,
+            EdgeMetadataControllerPlugin,
             CameraControllerPlugin,
         ))
         // Systems that create Egui widgets should be run during the `CoreSet::Update` set,
@@ -360,7 +366,20 @@ fn setup_ui(
                         });
                     }
                 });
-            ui.separator();;
+            ui.separator();
+            egui::CollapsingHeader::new("Node Metadata")
+                .default_open(true)
+                .show(ui, |ui| {
+                    if napkin.selected_node.is_none() {
+                        ui.label("No node selected");
+                    } else {
+                        let node_metadata = napkin.node_metadata.iter().filter(|m| m.owner_id == napkin.selected_node.clone().unwrap());
+                        for n_metadata in node_metadata {
+                            ui.label(format!("Name: {}", n_metadata.name));
+                        }
+                    }
+                });
+            ui.separator();
             egui::CollapsingHeader::new("Edge Properties")
                 .default_open(true)
                 .show(ui, |ui| {
@@ -374,7 +393,12 @@ fn setup_ui(
                                 }
                             }
                         }
-                        let project = napkin.projects.iter().find(|p| p.id == edits.edge.project).unwrap();
+                        let default_project = NapkinProject {
+                            id: "".to_string(),
+                            scope: "Unknown".to_string(),
+                            name: "Unknown".to_string()
+                        };
+                        let project = napkin.projects.iter().find(|p| p.id == edits.edge.project).unwrap_or(&default_project);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                             ui.add(egui::Label::new(egui::RichText::new(
                                         if edits.edge.id.is_empty() { "New Edge" } else { &edits.edge.id }
@@ -421,24 +445,25 @@ fn setup_ui(
                     }
                 });
             ui.separator();
+            egui::CollapsingHeader::new("Edge Metadata")
+                .default_open(true)
+                .show(ui, |ui| {
+                    if napkin.selected_edge.is_none() {
+                        ui.label("No edge selected");
+                    } else {
+                        let edge_metadata = napkin.edge_metadata.iter().filter(|m| m.owner_id == napkin.selected_edge.clone().unwrap());
+                        for n_metadata in edge_metadata {
+                            ui.label(format!("Name: {}", n_metadata.name));
+                        }
+                    }
+                });
+            ui.separator();
 
             ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
         })
         .response
         .rect
         .width();
-
-    fn get_mouse_position(windows: Query<&Window, With<PrimaryWindow>>, cameras: Query<(&Camera, &GlobalTransform)>) -> Option<Vec2> {
-        let window = windows.single();
-        let Some(cursor_position) = window.cursor_position() else {
-            return None;
-        };
-        let camera = cameras.single();
-        let Some(mouse_position) = camera.0.viewport_to_world_2d(camera.1, cursor_position) else {
-            return None;
-        };
-        Some(mouse_position)
-    }
 
     let central_panel = egui::CentralPanel::default()
         .frame(egui::Frame::none().inner_margin(4.0))
@@ -447,12 +472,6 @@ fn setup_ui(
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
                     occupied_screen_space.bottom = ui.horizontal_wrapped(|ui| {
                         ui.label("Z90 Studios, LLC");
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let mouse_query = get_mouse_position(windows, cameras);
-                            if let Some(mouse_position) = mouse_query {
-                                ui.label(format!("({:.2},{:.2})", mouse_position.x, mouse_position.y));
-                            }
-                        });
                     }).response.rect.height();
                 });
             });
@@ -470,8 +489,22 @@ fn setup_ui(
                 };
                 napkin.selected_project = Some("".to_string());
             }
-            ui.button("Node");
-            ui.button("Edge");
+            if ui.button("Node").clicked() {
+                edits.node = NapkinNode {
+                    id: "".to_string(),
+                    project: "".to_string(),
+                };
+                napkin.selected_node = Some("".to_string());
+            }
+            if ui.button("Edge").clicked() {
+                edits.edge = NapkinEdge {
+                    id: "".to_string(),
+                    project: "".to_string(),
+                    source: "".to_string(),
+                    target: "".to_string(),
+                };
+                napkin.selected_edge = Some("".to_string());
+            }
         });
     });
 

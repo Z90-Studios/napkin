@@ -188,7 +188,6 @@ pub fn handle_click(
             napkin.selected_edge = Some(edge.id.clone());
             return;
         }
-        napkin.selected_edge = None;
     }
 }
 
@@ -259,12 +258,15 @@ fn cast_ray(
                 QueryFilter::new().groups(CollisionGroups::new(Group::GROUP_4, Group::GROUP_14)),
                 |e| {
                     entity = Some(e);
-                    commands.entity(e).insert(HoveredEdge);
                     camera_controller.enabled = false;
     
                     true
                 },
             );
+        }
+
+        if let Some(e) = entity {
+            commands.entity(e).insert(HoveredEdge);
         }
 
         for (n_entity, color_material) in &mut edges.iter() {
@@ -277,7 +279,6 @@ fn cast_ray(
             } else {
                 commands.entity(n_entity).remove::<HoveredEdge>();
                 material.color = Color::WHITE;
-                camera_controller.enabled = true;
             }
         }
     }
