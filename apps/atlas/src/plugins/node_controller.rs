@@ -119,12 +119,23 @@ fn node_spawner(
         }
     }
     fn calculate_balanced_start_point(index: usize, total_nodes: usize) -> Vec2 {
-        let angle = 2.0 * std::f32::consts::PI * (index as f32) / (total_nodes as f32);
-        let radius = total_nodes as f32;
+        const GOLDEN_RATIO: f32 = 1.61803398875;
+        const GOLDEN_ANGLE: f32 = std::f32::consts::PI * (3.0 - GOLDEN_RATIO);
+
+        let angle = index as f32 * GOLDEN_ANGLE;
+
+        let radius = 10.0 * (index as f32).sqrt();
+
         Vec2::new(
             radius * angle.cos(),
             radius * angle.sin(),
         )
+        // let angle = 2.0 * std::f32::consts::PI * (index as f32) / (total_nodes as f32);
+        // let radius = 5.0;
+        // Vec2::new(
+        //     radius * angle.cos(),
+        //     radius * angle.sin(),
+        // )
     }
 
     let node_size: f32 = 6.0;
@@ -235,7 +246,6 @@ pub fn handle_click(
             napkin.selected_node = Some(node.id.clone());
             return;
         }
-        napkin.selected_node = None;
     }
 }
 
@@ -297,13 +307,16 @@ pub fn cast_ray(
             |e| {
                 // Callback called on each collider hit by the ray.
                 entity = Some(e);
-                commands.entity(e).insert(HoveredNode);
                 camera_controller.enabled = false;
                 // if nodes.contains(entity) {
 
                 true // Return `false` instead if we want to stop searching for other hits.
             },
         );
+
+        if let Some(e) = entity {
+            commands.entity(e).insert(HoveredNode);
+        }
 
         for (n_entity, node, color_material) in &mut nodes.iter() {
             let material = materials.get_mut(color_material).unwrap();
@@ -320,7 +333,6 @@ pub fn cast_ray(
                 } else {
                     Color::linear_rgb(0.4, 0.2, 0.2)
                 };
-                camera_controller.enabled = true;
             }
         }
         // if let Some((entity, _toi)) = hit {
@@ -345,75 +357,176 @@ fn handle_node_physics(
     time: Res<Time>,
     napkin: Res<NapkinSettings>,
 ) {
-    let k: f32 = 0.5;
+    let nodes = query
+        .iter_mut()
+        .map(|(transform, node_controller)| (transform.translation, node_controller))
+        .collect::<Vec<_>>();
+    let area = (nodes.len() as f32).sqrt() * (3.0);
+    let k = (area / nodes.len() as f32).sqrt();
+    let cooling_factor: f32 = 0.1;
+    let mut rng = rand::thread_rng();
+    let mut velocities = vec![Vec3::ZERO; nodes.len()];
+
+    let global_repulsion_factor = 90.0;
+
+    let mut edge_weight: Vec<usize> = vec![0 as usize; nodes.len()];
+
+    // Attraction
+    for edge in napkin.edges.iter() {
+        if let (Some((i, source)), Some((j, target))) = (
+            nodes.iter().enumerate().find(|(_, n)| n.1.id == edge.source),
+            nodes.iter().enumerate().find(|(_, n)| n.1.id == edge.target)
+        ) {
+            let dx = source.0.x - target.0.x;
+            let dy = source.0.y - target.0.y;
+            let distance = (dx * dx + dy * dy).sqrt();
+            edge_weight[i] += 1;
+            edge_weight[j] += 1;
+            if distance > 0.0 {
+                let attractive_force = (distance - 100.0) / distance;
+                velocities[i].x -= dx / distance * attractive_force;
+                velocities[i].y -= dy / distance * attractive_force;
+                velocities[j].x += dx / distance * attractive_force;
+                velocities[j].y += dy / distance * attractive_force;
+            }
+        }
+    }
+
+    // Repulsion
+    for i in 0..nodes.len() {
+        for j in (i + 1)..nodes.len() {
+            let iw = edge_weight[i];
+            let jw = edge_weight[j];
+            let dx = nodes[i].0.x - nodes[j].0.x;
+            let dy = nodes[i].0.y - nodes[j].0.y;
+            let distance = (dx * dx + dy * dy).sqrt();
+            if distance > 0.0 {
+                //let repulsive_force = k * k / distance;
+                let repulsive_force = global_repulsion_factor / (distance * distance);
+                let weight_factor = 1.0 * (iw + jw + 1) as f32;
+                velocities[i].x += dx / distance * repulsive_force * weight_factor;
+                velocities[i].y += dy / distance * repulsive_force * weight_factor;
+                velocities[j].x -= dx / distance * repulsive_force * weight_factor;
+                velocities[j].y -= dy / distance * repulsive_force * weight_factor;
+            }
+        }
+    }
+
+
+    // Gravity
+    for i in 0..nodes.len() {
+        let ew = edge_weight[i];
+        velocities[i] += -nodes[i].0.normalize() * (ew as f32 / 1.01 * ew as f32);
+    }
+
+    // Displacement
+    for (i, (mut transform, _)) in query.iter_mut().enumerate() {
+        let dx = velocities[i].x;
+        let dy = velocities[i].y;
+        let distance = (dx * dx + dy * dy).sqrt();
+        if distance > 0.1 {
+            velocities[i].x += dx / distance * cooling_factor.min(distance);
+            velocities[i].y += dy / distance * cooling_factor.min(distance);
+
+            // Do some kinda division here to make sure that the actual translation doesn't go
+            // outside the bounds, not the velocity
+            velocities[i].x = velocities[i].x.max(-area / 2.0).min(area / 2.0);
+            velocities[i].y = velocities[i].y.max(-area / 2.0).min(area / 2.0);
+
+            transform.translation += velocities[i].with_z(0.0);
+        }
+    }
+}
+
+fn handle_node_physics_old(
+    mut query: Query<(&mut Transform, &NodeController)>,
+    time: Res<Time>,
+    napkin: Res<NapkinSettings>,
+) {
+    let k: f32 = 1.0;
     let k_sqr = k * k;
     let nodes = query
         .iter_mut()
         .map(|(transform, node_controller)| (transform.translation, node_controller))
         .collect::<Vec<_>>();
-    let area = (nodes.len() as f32).sqrt() * (30.0 * 30.0);
+    let area = (nodes.len() as f32).sqrt() * (6.0 * 6.0);
     let temp = k_sqr / area;
-    if temp == 1.0 {
-        return;
-    }
     let mut kdtree = KdTree::new(2);
+    let mut velocities = vec![Vec3::ZERO; nodes.len()];
+    let delta_time = time.delta_seconds();
     for i in 0..nodes.len() {
         let node_position = [nodes[i].0.x, nodes[i].0.y];
         kdtree.add(node_position, i).unwrap();
     }
-    let mut velocities = vec![Vec3::ZERO; nodes.len()];
-    let delta_time = time.delta_seconds();
 
     for i in 0..nodes.len() {
-        let node_position = nodes[i].0;
-        for j in 0..nodes.len() {
-            if i != j {
-                let distance_squared = (node_position - nodes[j].0).length_squared();
-                let repulsion = temp / distance_squared;
-                let dx = node_position.x - nodes[j].0.x;
-                let dy = node_position.y - nodes[j].0.y;
-                let angle = (dx * dx + dy * dy).sqrt().atan2(dy);
+        let mut repulsion_force = Vec2::ZERO;
+        let mut attraction_force = Vec2::ZERO;
 
-                velocities[i].x += repulsion * angle.cos();
-                velocities[i].y += repulsion * angle.sin();
-            }
-        }
-    }
-
-    for i in 0..nodes.len() {
-        let mut center = Vec2::ZERO;
-        let mut neighbor_count = 0;
         let node_position = [nodes[i].0.x, nodes[i].0.y];
-        if let Some(neighbors) = kdtree.within(&node_position, 1000.0, &kdtree::distance::squared_euclidean).ok() {
-            for neighbor in neighbors {
-                if *neighbor.1 != i {
-                    neighbor_count += 1;
-                    center.x += nodes[*neighbor.1].0.x;
-                    center.y += nodes[*neighbor.1].0.y;
+        let node_size = 6.0 * 3.0;
+
+        // Repulsion and attraction for nodes
+        for j in 0..nodes.len() {
+            if j != i {
+                let connected = napkin.edges.iter().any(|edge|
+                    (edge.source == nodes[i].1.id && edge.target == nodes[j].1.id) ||
+                    (edge.source == nodes[i].1.id && edge.source == nodes[j].1.id)
+                );
+                let edge_weight = if connected { 0.8 } else { 1.0 };
+                let distance = nodes[i].0 - nodes[j].0;
+                let distance_sqr = distance.length_squared();
+                let weighted_distance = (k * k * node_size * node_size) / (distance_sqr * edge_weight);
+                if connected {
+                    info!("id: {}, direction: {}, distance: {}, w1: {}, w2: {}, w: {}", i, distance.xy().normalize(), distance.length(), (k * k * node_size * node_size), (distance_sqr * edge_weight), weighted_distance);
                 }
+                repulsion_force += distance.xy().normalize() * weighted_distance;
             }
         }
 
-        if neighbor_count > 0 {
-            center.x /= neighbor_count as f32;
-            center.y /= neighbor_count as f32;
-            let attraction = (center.x - nodes[i].0.x, center.y - nodes[i].0.y);
-            velocities[i].x -= attraction.0;
-            velocities[i].y -= attraction.1;
-        }
-    }
+        // Attraction force
+        let mut center = Vec2::ZERO;
+        let mut total_weight = 0.0;
+        // if let Some(neighbors) = kdtree.within(&node_position, 1000.0, &kdtree::distance::squared_euclidean).ok() {
+        //     for neighbor in neighbors {
+        //         if *neighbor.1 != i {
+        //             let j = *neighbor.1;
+        //             let connected = napkin.edges.iter().any(|edge|
+        //                 (edge.source == nodes[i].1.id && edge.target == nodes[j].1.id) ||
+        //                 (edge.source == nodes[i].1.id && edge.source == nodes[j].1.id)
+        //             );
+        //             let edge_weight = if connected { 2.0 } else { 1.0 };
+        //             total_weight += edge_weight;
+        //             center += (nodes[j].0 - nodes[i].0).xy() * edge_weight;
+        //         }
+        //     }
+        // }
 
-    for i in 0..nodes.len() {
-        let speed = (velocities[i].x * velocities[i].x + velocities[i].y * velocities[i].y).sqrt();
+        if total_weight > 0.0 {
+            center /= total_weight;
+            let distance = center.length();
+            let weighted_distance = (k * k * node_size) / (distance * distance);
+            attraction_force += center.normalize() * weighted_distance;
+        }
+
+        // Gravity
+        let gravity_force = -nodes[i].0.xy().normalize() * 0.6;
+
+        // Final velocity, including jittering
+        let mut velocity = repulsion_force + attraction_force + gravity_force;
+        let jitter = Vec2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5) * 0.1;
+        velocity += jitter * 0.1;
+        let speed = (velocity.x * velocity.x + velocity.y * velocity.y).sqrt();
         if speed > area {
             let ratio = area / speed;
-            velocities[i].x *= ratio;
-            velocities[i].y *= ratio;
+            velocity.x *= ratio;
+            velocity.y *= ratio;
         }
+        velocities[i] = Vec3::new(velocity.x, velocity.y, 0.0);
     }
 
     for (i, (mut transform, _)) in query.iter_mut().enumerate() {
-        transform.translation += velocities[i].with_z(0.0) * delta_time;
+        transform.translation += velocities[i].with_z(0.0);
     }
 
 
