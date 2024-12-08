@@ -27,6 +27,7 @@ use plugins::{
     napkin_controller::NapkinPlugin,
     node_controller::NodeControllerPlugin,
 };
+use serde::{Deserialize, Serialize};
 use types::napkin_types::*;
 
 #[derive(Default, Resource)]
@@ -49,7 +50,9 @@ pub struct NapkinSettings {
     hovered_edges: Option<Vec<NapkinEdge>>,
     selected_project: Option<String>,
     selected_node: Option<String>,
+    selected_node_metadata: Option<(String, String)>,
     selected_edge: Option<String>,
+    selected_edge_metadata: Option<(String, String)>,
     nodes: Vec<NapkinNode>,
     node_metadata: Vec<NapkinNodeMetadata>,
     edges: Vec<NapkinEdge>,
@@ -71,7 +74,9 @@ impl Default for NapkinSettings {
             hovered_nodes: None,
             hovered_edges: None,
             selected_node: None,
+            selected_node_metadata: None,
             selected_edge: None,
+            selected_edge_metadata: None,
             nodes: Vec::new(),
             node_metadata: Vec::new(),
             edges: Vec::new(),
@@ -90,6 +95,10 @@ pub struct NapkinEdits {
     save_node: bool,
     edge: NapkinEdge,
     save_edge: bool,
+    node_metadata: NapkinNodeMetadata,
+    save_node_metadata: bool,
+    edge_metadata: NapkinEdgeMetadata,
+    save_edge_metadata: bool,
 }
 
 impl Default for NapkinEdits {
@@ -101,6 +110,10 @@ impl Default for NapkinEdits {
             save_node: false,
             edge: NapkinEdge::default(),
             save_edge: false,
+            node_metadata: NapkinNodeMetadata::default(),
+            save_node_metadata: false,
+            edge_metadata: NapkinEdgeMetadata::default(),
+            save_edge_metadata: false,
         }
     }
 }
@@ -166,6 +179,30 @@ pub fn configure_visuals_system(mut contexts: EguiContexts) {
     contexts.ctx_mut().set_visuals(atlas_visuals);
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct EditableMetadata {
+    name: String,
+    value: String,
+}
+
+impl From<NapkinNodeMetadata> for EditableMetadata {
+    fn from(metadata: NapkinNodeMetadata) -> Self {
+        Self {
+            name: metadata.name,
+            value: metadata.value.to_string(),
+        }
+    }
+}
+
+impl From<NapkinEdgeMetadata> for EditableMetadata {
+    fn from(metadata: NapkinEdgeMetadata) -> Self {
+        Self {
+            name: metadata.name,
+            value: metadata.value.to_string(),
+        }
+    }
+}
+
 fn setup_ui(
     mut contexts: EguiContexts,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -198,6 +235,29 @@ fn setup_ui(
         stroke: egui::Stroke::new(0.2, Color32::from_white_alpha(255)),
         ..egui::Frame::none()
     };
+
+    let metadata_editor = egui::Window::new("Metadata Editor")
+        .open(&mut (napkin.selected_node_metadata.is_some() || napkin.selected_edge_metadata.is_some()))
+        .default_height(500.0)
+        .show(ctx, |ui| {
+
+            let mut metadata = if napkin.selected_node_metadata.is_some() { EditableMetadata::from(edits.node_metadata.clone()) } else { EditableMetadata::from(edits.edge_metadata.clone()) };
+            ui.horizontal_wrapped(|ui| {
+                ui.text_edit_singleline(&mut metadata.name);
+                ui.code_editor(&mut metadata.value);
+            });
+            ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+
+            if napkin.selected_node_metadata.is_some() {
+                edits.node_metadata.name = metadata.name;
+                let value_edit = serde_json::from_str::<serde_json::Value>(&metadata.value);
+                if value_edit.is_ok() {
+                    edits.node_metadata.value = value_edit.unwrap();
+                }    
+            } else {
+
+            }
+        });
 
     occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
         .frame(atlas_panel_frame)
@@ -373,9 +433,18 @@ fn setup_ui(
                     if napkin.selected_node.is_none() {
                         ui.label("No node selected");
                     } else {
-                        let node_metadata = napkin.node_metadata.iter().filter(|m| m.owner_id == napkin.selected_node.clone().unwrap());
+                        let node_metadata = napkin.
+                            node_metadata
+                            .iter()
+                            .filter(|m|
+                                m.owner_id == napkin.selected_node.clone().unwrap()
+                            ).cloned().collect::<Vec<NapkinNodeMetadata>>();
                         for n_metadata in node_metadata {
-                            ui.label(format!("Name: {}", n_metadata.name));
+                            if ui.button(format!("{}", n_metadata.name)).clicked() {
+                                napkin.selected_edge_metadata = None;
+                                napkin.selected_node_metadata = Some((n_metadata.owner_id.clone(), n_metadata.name.clone()));
+                                edits.node_metadata = n_metadata;
+                            }
                         }
                     }
                 });
@@ -451,9 +520,18 @@ fn setup_ui(
                     if napkin.selected_edge.is_none() {
                         ui.label("No edge selected");
                     } else {
-                        let edge_metadata = napkin.edge_metadata.iter().filter(|m| m.owner_id == napkin.selected_edge.clone().unwrap());
+                        let edge_metadata = napkin.
+                            edge_metadata
+                            .iter()
+                            .filter(|m|
+                                m.owner_id == napkin.selected_edge.clone().unwrap()
+                            ).cloned().collect::<Vec<NapkinEdgeMetadata>>();
                         for n_metadata in edge_metadata {
-                            ui.label(format!("Name: {}", n_metadata.name));
+                            if ui.button(format!("{}", n_metadata.name)).clicked() {
+                                napkin.selected_node_metadata = None;
+                                napkin.selected_edge_metadata = Some((n_metadata.owner_id.clone(), n_metadata.name.clone()));
+                                edits.edge_metadata = n_metadata;
+                            }
                         }
                     }
                 });
@@ -508,9 +586,13 @@ fn setup_ui(
         });
     });
 
-    if central_panel.response.context_menu_opened() {
+    if 
+        metadata_editor.is_some_and(|m| m.response.hovered())
+        || central_panel.response.context_menu_opened()
+    {
         napkin.context_menu_open = true;
     } else {
         napkin.context_menu_open = false;
     }
+
 }
