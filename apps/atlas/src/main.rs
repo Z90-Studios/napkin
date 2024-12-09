@@ -1,3 +1,4 @@
+use core::f32;
 use std::time::Duration;
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
@@ -30,6 +31,7 @@ use plugins::{
     node_controller::NodeControllerPlugin,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use types::napkin_types::*;
 
 #[derive(Default, Resource)]
@@ -38,6 +40,12 @@ pub struct OccupiedScreenSpace {
     top: f32,
     right: f32,
     bottom: f32,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+enum MetadataEditTab {
+    Table,
+    Raw,
 }
 
 #[derive(Resource)]
@@ -56,6 +64,8 @@ pub struct NapkinSettings {
     selected_node_metadata: Option<(String, String)>,
     selected_edge: Option<String>,
     selected_edge_metadata: Option<(String, String)>,
+    metadata_editor_open: bool,
+    metadata_editor_tab: MetadataEditTab,
     nodes: Vec<NapkinNode>,
     node_metadata: Vec<NapkinNodeMetadata>,
     edges: Vec<NapkinEdge>,
@@ -81,6 +91,8 @@ impl Default for NapkinSettings {
             selected_node_metadata: None,
             selected_edge: None,
             selected_edge_metadata: None,
+            metadata_editor_open: false,
+            metadata_editor_tab: MetadataEditTab::Table,
             nodes: Vec::new(),
             node_metadata: Vec::new(),
             edges: Vec::new(),
@@ -239,12 +251,13 @@ fn setup_ui(
     windows: Query<&Window, With<PrimaryWindow>>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     mut occupied_screen_space: ResMut<OccupiedScreenSpace>,
-    mut napkin: ResMut<NapkinSettings>,
+    mut napkin_settings: ResMut<NapkinSettings>,
     mut edits: ResMut<NapkinEdits>,
     mut debug_state: ResMut<DebugState>,
     diagnostics: Res<DiagnosticsStore>,
 ) {
     let ctx = contexts.ctx_mut();
+    let mut napkin = napkin_settings.into_inner();
 
     let atlas_panel_frame = egui::Frame {
         fill: egui::Color32::from_black_alpha((255. * 0.99) as u8),
@@ -268,18 +281,56 @@ fn setup_ui(
         ..egui::Frame::none()
     };
 
+    let mut metadata_editor_open = napkin.metadata_editor_open.clone();
+    
     let metadata_editor = egui::Window::new("Metadata Editor")
         .frame(atlas_window_frame)
-        .open(&mut (napkin.selected_node_metadata.is_some() || napkin.selected_edge_metadata.is_some()))
+        .open(&mut metadata_editor_open)
         .default_height(500.0)
         .show(ctx, |ui| {
 
             let mut metadata = if napkin.selected_node_metadata.is_some() { EditableMetadata::from(edits.node_metadata.clone()) } else { EditableMetadata::from(edits.edge_metadata.clone()) };
             ui.horizontal_wrapped(|ui| {
-                ui.text_edit_singleline(&mut metadata.name);
-                ui.code_editor(&mut metadata.value);
+                ui.horizontal(|ui| {
+                    ui.selectable_value(&mut napkin.metadata_editor_tab, MetadataEditTab::Table, "Table View");
+                    ui.selectable_value(&mut napkin.metadata_editor_tab, MetadataEditTab::Raw, "Raw View");
+                });
             });
-            ui.allocate_rect(ui.available_rect_before_wrap(), egui::Sense::hover());
+            ui.separator();
+            match napkin.metadata_editor_tab {
+                MetadataEditTab::Raw => {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            ui.available_size(),
+                            egui::TextEdit::singleline(&mut metadata.name)
+                            .hint_text(egui::RichText::new("Metadata Name"))
+                        );
+                    });
+                    ui.add_sized(
+                        ui.available_size(),
+                        egui::TextEdit::multiline(&mut metadata.value).code_editor(),
+                    );
+
+                },
+                MetadataEditTab::Table => {
+                    let mut reconverted = serde_json::from_str::<serde_json::Value>(&metadata.value).unwrap();
+                    let objects = reconverted.as_object_mut().unwrap();
+                    egui::Grid::new("metadata_table_editor")
+                        .num_columns(2)
+                        .spacing([4.0, 4.0])
+                        .show(ui, |ui| {
+                            for (ref mut key, ref mut value) in objects.iter_mut() {
+                                let mut k = key.to_string();
+                                let mut v = value.to_string();
+                                ui.add(egui::TextEdit::singleline(&mut k));
+                                ui.text_edit_singleline(&mut v);
+                                *key = &k;
+                                *value = &mut serde_json::from_str::<serde_json::Value>(v.as_str()).unwrap();
+                            }
+                        });
+                    metadata.value = json!(objects).to_string();
+                }
+            }
 
             if napkin.selected_node_metadata.is_some() {
                 edits.node_metadata.name = metadata.name;
@@ -291,6 +342,7 @@ fn setup_ui(
 
             }
         });
+    napkin.metadata_editor_open = metadata_editor_open;
 
     occupied_screen_space.top = egui::TopBottomPanel::top("top_panel")
         .frame(atlas_panel_frame)
@@ -477,6 +529,7 @@ fn setup_ui(
                                 napkin.selected_edge_metadata = None;
                                 napkin.selected_node_metadata = Some((n_metadata.owner_id.clone(), n_metadata.name.clone()));
                                 edits.node_metadata = n_metadata;
+                                napkin.metadata_editor_open = true;
                             }
                         }
                     }
@@ -564,6 +617,7 @@ fn setup_ui(
                                 napkin.selected_node_metadata = None;
                                 napkin.selected_edge_metadata = Some((n_metadata.owner_id.clone(), n_metadata.name.clone()));
                                 edits.edge_metadata = n_metadata;
+                                napkin.metadata_editor_open = true;
                             }
                         }
                     }
