@@ -3,19 +3,12 @@ name = "atlas"
 version = "0.1.0"
 edition = "2021"
 
-[profile.dev.package."*"]
-opt-level = 3
-
-[profile.dev]
-opt-level = 1
-
 [dependencies]
 bevy = "0.14.2"
 bevy_egui = "0.30.1"
 bevy_http_client = "0.6.0"
 bevy_rapier2d = "0.27.0"
 egui_plot = "0.29.0"
-kdtree = "0.7.0"
 rand = "0.8.5"
 serde = "1.0.215"
 serde_json = "1.0.133"

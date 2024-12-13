@@ -14,5 +14,5 @@ services:
     ports:
       - "5438:5432"
     volumes:
-      - ../.napkin/postgres-data:/var/lib/postgresql/data
+      - $HOME/.napkin/postgres-data:/var/lib/postgresql/data
       - ./create_tables.sql:/docker-entrypoint-initdb.d/create-tables.sql
