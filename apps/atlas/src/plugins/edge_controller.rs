@@ -220,7 +220,7 @@ pub fn handle_click(
         return;
     }
 
-    if mouse_button_input.just_pressed(camera_controller.single().mouse_key_cursor_grab) {
+    if mouse_button_input.just_pressed(MouseButton::Left) {
         for (_, edge) in &hovered_edges {
             napkin.selected_edge = Some(edge.id.clone());
             return;

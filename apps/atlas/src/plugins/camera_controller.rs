@@ -50,7 +50,7 @@ impl Default for CameraController {
             //key_left: KeyCode::KeyA,
             //key_right: KeyCode::KeyD,
             //key_run: KeyCode::ShiftLeft,
-            mouse_key_cursor_grab: MouseButton::Left,
+            mouse_key_cursor_grab: MouseButton::Middle,
             scroll_factor: 1.25,
             //walk_speed: 200.0,
             //run_speed: 500.0,
